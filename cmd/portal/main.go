@@ -14,9 +14,8 @@ import (
 	"github.com/achgithub/sap-cpi-toolkit/internal/auth"
 )
 
-// staticFiles holds the React build output.
-// In Docker: Dockerfile copies web/dist/ → cmd/portal/static/ before go build.
-// The .gitkeep placeholder keeps the directory in git; it is overwritten by the real build.
+// staticFiles holds the React build output embedded at compile time.
+// Dockerfile copies web/dist/ → cmd/portal/static/ before go build.
 //
 //go:embed all:static
 var staticFiles embed.FS
@@ -24,12 +23,14 @@ var staticFiles embed.FS
 func main() {
 	port := envOr("PORT", "3000")
 	deploymentEnv := envOr("DEPLOYMENT_ENV", "local")
+	baseURL := envOr("BASE_URL", "http://localhost:3000")
 	workerURL := envOr("WORKER_INTERNAL_URL", "http://localhost:8081")
 	groovyURL := envOr("GROOVY_INTERNAL_URL", "http://localhost:8082")
 
 	authMiddleware := auth.New(auth.Config{
 		BypassEnabled: envOr("AUTH_BYPASS_ENABLED", "false") == "true",
 		Environment:   deploymentEnv,
+		BaseURL:       baseURL,
 		ClientID:      os.Getenv("IAS_CLIENT_ID"),
 		ClientSecret:  os.Getenv("IAS_CLIENT_SECRET"),
 		TenantURL:     os.Getenv("IAS_TENANT_URL"),
@@ -45,17 +46,22 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// Health — unauthenticated (required for Kyma liveness probes)
+	// Health — unauthenticated (Kyma liveness probes)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
 	})
+
+	// Auth routes — unauthenticated (they ARE the login flow)
+	mux.HandleFunc("/auth/login", authMiddleware.LoginHandler)
+	mux.HandleFunc("/auth/callback", authMiddleware.CallbackHandler)
+	mux.HandleFunc("/auth/logout", authMiddleware.LogoutHandler)
 
 	// API routes — authenticated, proxied to downstream pods
 	mux.Handle("/api/worker/", authMiddleware.Handler(workerProxy))
 	mux.Handle("/api/groovy/", authMiddleware.Handler(groovyProxy))
 
-	// React SPA — embedded at build time
-	mux.Handle("/", spaHandler(http.FileServer(http.FS(staticFS))))
+	// React SPA — authenticated (redirects to /auth/login if no session)
+	mux.Handle("/", authMiddleware.Handler(spaHandler(http.FileServer(http.FS(staticFS)))))
 
 	addr := ":" + port
 	log.Printf("[portal] listening on %s (env=%s, auth-bypass=%v)", addr, deploymentEnv, authMiddleware.IsActive())
@@ -83,7 +89,6 @@ func mustProxy(target, stripPrefix string) http.Handler {
 // spaHandler falls back to index.html for unknown paths (client-side routing).
 func spaHandler(fileServer http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Serve index.html for paths without a file extension (SPA routes)
 		if r.URL.Path != "/" && !strings.Contains(r.URL.Path, ".") {
 			r.URL.Path = "/"
 		}
