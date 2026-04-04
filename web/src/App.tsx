@@ -4,10 +4,13 @@ import {
   ShellBarItem,
   TabContainer,
   Tab,
+  FlexBox,
+  FlexBoxDirection,
 } from '@ui5/webcomponents-react'
 
 import XMLFormatter from './pages/XMLFormatter'
 import JSONFormatter from './pages/JSONFormatter'
+import XSDGenerator from './pages/XSDGenerator'
 import Converter from './pages/Converter'
 import KeyGen from './pages/KeyGen'
 import CertGen from './pages/CertGen'
@@ -17,60 +20,65 @@ import GroovyIDE from './pages/GroovyIDE'
 type ToolTab =
   | 'xml-formatter'
   | 'json-formatter'
+  | 'xsd-generator'
   | 'converter'
   | 'keygen'
   | 'certgen'
   | 'testdata'
   | 'groovy'
 
-const TABS: { id: ToolTab; label: string }[] = [
-  { id: 'xml-formatter', label: 'XML Formatter' },
-  { id: 'json-formatter', label: 'JSON Formatter' },
-  { id: 'converter', label: 'XML ↔ JSON' },
-  { id: 'keygen', label: 'Key Generation' },
-  { id: 'certgen', label: 'Certificates' },
-  { id: 'testdata', label: 'Test Data' },
-  { id: 'groovy', label: 'Groovy IDE' },
+const TABS: { id: ToolTab; label: string; icon: string }[] = [
+  { id: 'xml-formatter',  label: 'XML Formatter',  icon: 'syntax'        },
+  { id: 'json-formatter', label: 'JSON Formatter', icon: 'syntax'        },
+  { id: 'xsd-generator',  label: 'XSD Generator',  icon: 'document-text' },
+  { id: 'converter',      label: 'XML ↔ JSON',     icon: 'transfer'      },
+  { id: 'keygen',         label: 'Key Generation', icon: 'key'           },
+  { id: 'certgen',        label: 'Certificates',   icon: 'certificate'   },
+  { id: 'testdata',       label: 'Test Data',      icon: 'simulate'      },
+  { id: 'groovy',         label: 'Groovy IDE',     icon: 'terminal'      },
 ]
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ToolTab>('xml-formatter')
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <FlexBox direction={FlexBoxDirection.Column} style={{ height: '100vh', overflow: 'hidden' }}>
       <ShellBar
         primaryTitle="SAP CPI Toolkit"
         secondaryTitle="Developer Tools"
+        logo={<img alt="SAP" src="https://www.sap.com/dam/application/shared/logos/sap-logo-svg.svg" style={{ height: '1.5rem' }} />}
       >
         <ShellBarItem icon="settings" text="Settings" />
       </ShellBar>
 
       <TabContainer
-        style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}
         onTabSelect={(e) => {
-          const selected = e.detail.tab.getAttribute('data-id') as ToolTab
-          if (selected) setActiveTab(selected)
+          const id = (e.detail.tab as HTMLElement).dataset.id as ToolTab
+          if (id) setActiveTab(id)
         }}
+        style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}
       >
         {TABS.map((tab) => (
           <Tab
             key={tab.id}
             data-id={tab.id}
             text={tab.label}
+            icon={tab.icon}
             selected={activeTab === tab.id}
           />
         ))}
       </TabContainer>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '1rem' }}>
-        {activeTab === 'xml-formatter' && <XMLFormatter />}
+      <div style={{ flex: 1, overflow: 'auto', padding: '1rem', background: 'var(--sapBackgroundColor)' }}>
+        {activeTab === 'xml-formatter'  && <XMLFormatter />}
         {activeTab === 'json-formatter' && <JSONFormatter />}
-        {activeTab === 'converter' && <Converter />}
-        {activeTab === 'keygen' && <KeyGen />}
-        {activeTab === 'certgen' && <CertGen />}
-        {activeTab === 'testdata' && <TestDataGen />}
-        {activeTab === 'groovy' && <GroovyIDE />}
+        {activeTab === 'xsd-generator'  && <XSDGenerator />}
+        {activeTab === 'converter'      && <Converter />}
+        {activeTab === 'keygen'         && <KeyGen />}
+        {activeTab === 'certgen'        && <CertGen />}
+        {activeTab === 'testdata'       && <TestDataGen />}
+        {activeTab === 'groovy'         && <GroovyIDE />}
       </div>
-    </div>
+    </FlexBox>
   )
 }
