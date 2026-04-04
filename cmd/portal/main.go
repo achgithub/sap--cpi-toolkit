@@ -1,7 +1,9 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/http/httputil"
@@ -11,6 +13,13 @@ import (
 
 	"github.com/achgithub/sap-cpi-toolkit/internal/auth"
 )
+
+// staticFiles holds the React build output.
+// In Docker: Dockerfile copies web/dist/ → cmd/portal/static/ before go build.
+// The .gitkeep placeholder keeps the directory in git; it is overwritten by the real build.
+//
+//go:embed all:static
+var staticFiles embed.FS
 
 func main() {
 	port := envOr("PORT", "3000")
@@ -29,6 +38,11 @@ func main() {
 	workerProxy := mustProxy(workerURL, "/api/worker")
 	groovyProxy := mustProxy(groovyURL, "/api/groovy")
 
+	staticFS, err := fs.Sub(staticFiles, "static")
+	if err != nil {
+		log.Fatalf("[portal] failed to create static filesystem: %v", err)
+	}
+
 	mux := http.NewServeMux()
 
 	// Health — unauthenticated (required for Kyma liveness probes)
@@ -40,10 +54,8 @@ func main() {
 	mux.Handle("/api/worker/", authMiddleware.Handler(workerProxy))
 	mux.Handle("/api/groovy/", authMiddleware.Handler(groovyProxy))
 
-	// React SPA — served from ./static (dev) or embedded (production build)
-	// The Dockerfile copies web/dist/ to cmd/portal/static/ before compiling.
-	// In local dev, run the Vite dev server separately on :5173.
-	mux.Handle("/", spaHandler(http.FileServer(http.Dir("./static"))))
+	// React SPA — embedded at build time
+	mux.Handle("/", spaHandler(http.FileServer(http.FS(staticFS))))
 
 	addr := ":" + port
 	log.Printf("[portal] listening on %s (env=%s, auth-bypass=%v)", addr, deploymentEnv, authMiddleware.IsActive())
@@ -69,14 +81,13 @@ func mustProxy(target, stripPrefix string) http.Handler {
 }
 
 // spaHandler falls back to index.html for unknown paths (client-side routing).
-func spaHandler(fs http.Handler) http.Handler {
+func spaHandler(fileServer http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Try to serve the file; if it doesn't exist serve index.html
+		// Serve index.html for paths without a file extension (SPA routes)
 		if r.URL.Path != "/" && !strings.Contains(r.URL.Path, ".") {
-			http.ServeFile(w, r, "./static/index.html")
-			return
+			r.URL.Path = "/"
 		}
-		fs.ServeHTTP(w, r)
+		fileServer.ServeHTTP(w, r)
 	})
 }
 
