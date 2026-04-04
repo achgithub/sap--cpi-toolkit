@@ -112,7 +112,7 @@ export default function EditorPanel({
               value={inputValue}
               rows={22}
               style={{ width: '100%', fontFamily: 'monospace' }}
-              onInput={(e) => onInputChange((e.target as HTMLTextAreaElement).value)}
+              onInput={(e) => onInputChange((e.target as unknown as HTMLTextAreaElement).value)}
             />
           </FlexBox>
 

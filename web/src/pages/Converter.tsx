@@ -50,15 +50,15 @@ export default function Converter() {
     >
       <SegmentedButton
         onSelectionChange={(e) => {
-          const item = e.detail.pressedItem as HTMLElement | null
+          const item = (e.detail as unknown as { selectedItem: HTMLElement }).selectedItem
           const dir = item?.dataset?.dir as Direction | undefined
           if (dir) { setDirection(dir); setInput(''); setOutput(''); setWarnings([]) }
         }}
       >
-        <SegmentedButtonItem data-dir="xml-to-json" pressed={isXMLtoJSON}>
+        <SegmentedButtonItem data-dir="xml-to-json" selected={isXMLtoJSON}>
           XML → JSON
         </SegmentedButtonItem>
-        <SegmentedButtonItem data-dir="json-to-xml" pressed={!isXMLtoJSON}>
+        <SegmentedButtonItem data-dir="json-to-xml" selected={!isXMLtoJSON}>
           JSON → XML
         </SegmentedButtonItem>
       </SegmentedButton>
