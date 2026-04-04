@@ -50,22 +50,30 @@ https://github.com/achgithub/sap--cpi-toolkit
 
 ## Development Workflow
 
-This project follows the global Mac/Pi workflow from `~/.claude/CLAUDE.md`:
-- Write code on Mac (here)
-- Commit to Git on Mac
-- Push manually
-- Build/test on Pi
+**This project does NOT use the Pi workflow.** It builds and runs entirely on Mac via Docker Desktop.
 
-## Testing Commands (run on Pi after pull)
+- Write code on Mac (Claude does this)
+- Commit to Git on Mac (Claude does this)
+- Build and test via Docker Compose on Mac (user does this)
+- Deploy to SAP BTP Kyma via `kubectl apply` (user does this)
+
+Go and npm are NOT needed directly — all compilation happens inside Docker multi-stage builds.
+
+## Build & Test Commands (run on Mac)
 
 ```bash
-# Go tests (worker)
-cd /path/to/sap-cpi-toolkit
-go test ./...
-
-# React build
-cd web && npm install && npm run build
-
-# Docker Compose (full local stack)
+# Full stack — builds all images and starts services
 docker compose -f deployments/local/docker-compose.yml up --build
+
+# Rebuild a single service after changes
+docker compose -f deployments/local/docker-compose.yml up --build portal
+docker compose -f deployments/local/docker-compose.yml up --build worker
+
+# View logs
+docker compose -f deployments/local/docker-compose.yml logs -f
+
+# Tear down
+docker compose -f deployments/local/docker-compose.yml down
 ```
+
+Open http://localhost:3000 after stack is up.
