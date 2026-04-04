@@ -1,0 +1,74 @@
+name: sap-cpi-toolkit
+
+services:
+  portal:
+    build:
+      context: ../../
+      dockerfile: Dockerfile.portal
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: ${PORTAL_PORT:-3000}
+      DEPLOYMENT_ENV: ${DEPLOYMENT_ENV:-local}
+      AUTH_BYPASS_ENABLED: ${AUTH_BYPASS_ENABLED:-true}
+      WORKER_INTERNAL_URL: ${WORKER_INTERNAL_URL:-http://worker:8081}
+      GROOVY_INTERNAL_URL: ${GROOVY_INTERNAL_URL:-http://groovy-runner:8082}
+      IAS_CLIENT_ID: ${IAS_CLIENT_ID:-}
+      IAS_CLIENT_SECRET: ${IAS_CLIENT_SECRET:-}
+      IAS_TENANT_URL: ${IAS_TENANT_URL:-}
+    depends_on:
+      - worker
+      - groovy-runner
+    mem_limit: 128m
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ../../
+      dockerfile: Dockerfile.worker
+    expose:
+      - "8081"
+    environment:
+      PORT: ${WORKER_PORT:-8081}
+      DB_URL: ${DB_URL:-postgres://toolkit:toolkit@postgres:5432/toolkit?sslmode=disable}
+      KEY_VALIDITY_MAX_DAYS: ${KEY_VALIDITY_MAX_DAYS:-365}
+      CERT_VALIDITY_MAX_DAYS: ${CERT_VALIDITY_MAX_DAYS:-90}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 256m
+    restart: unless-stopped
+
+  groovy-runner:
+    build:
+      context: ../../groovy-runner
+      dockerfile: Dockerfile
+    expose:
+      - "8082"
+    environment:
+      PORT: ${GROOVY_PORT:-8082}
+    mem_limit: 512m
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    expose:
+      - "5432"
+    ports:
+      - "5432:5432"  # exposed locally for dev tooling
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-toolkit}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-toolkit}
+      POSTGRES_DB: ${POSTGRES_DB:-toolkit}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-toolkit}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

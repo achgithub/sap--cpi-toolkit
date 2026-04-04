@@ -1,0 +1,26 @@
+# Go
+bin/
+*.exe
+*.test
+*.out
+vendor/
+
+# React
+web/node_modules/
+web/dist/
+
+# Env
+.env
+deployments/local/.env
+
+# Docker
+*.tar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

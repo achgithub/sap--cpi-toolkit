@@ -1,0 +1,26 @@
+{
+  "name": "sap-cpi-toolkit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@ui5/webcomponents": "^2.6.0",
+    "@ui5/webcomponents-fiori": "^2.6.0",
+    "@ui5/webcomponents-icons": "^2.6.0",
+    "@ui5/webcomponents-react": "^2.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
