@@ -10,7 +10,25 @@ Format and pretty-print XML with configurable indentation. Validate against sche
 
 ---
 
-## 2. JSON Formatter
+## 2. XSD Generator
+
+Generate an XSD schema from a sample XML document. Useful for CPI developers who have a real message but no schema — needed for message mapping, validation steps, and EDI configuration.
+
+**Input:** Sample XML (paste or upload)
+**Output:** Generated XSD file (download)
+**Behaviour:**
+- Analyses all elements and attributes in the sample
+- Infers types (string, integer, decimal, date, boolean) from content
+- Marks elements as optional/required based on occurrence in the sample (single sample = all required; future: multi-sample inference)
+- Handles namespaces
+
+**Limitations surfaced in UI:**
+- Schema is inferred from one example — cardinality and optionality should be reviewed
+- Complex types with mixed content flagged for manual review
+
+---
+
+## 3. JSON Formatter
 
 Format and pretty-print JSON with configurable indentation. Validate structure.
 

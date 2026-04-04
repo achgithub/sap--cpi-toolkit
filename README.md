@@ -7,14 +7,15 @@ A developer toolkit for SAP Cloud Platform Integration (CPI) built with Go, Reac
 | # | Tool | Description |
 |---|---|---|
 | 1 | XML Formatter | Format and validate XML with syntax highlighting |
-| 2 | JSON Formatter | Format and validate JSON |
-| 3 | XML ↔ JSON Converter | Roundtrip-safe conversion preserving namespaces |
-| 4 | PGP Key Generation | Ephemeral keypair generation (POC use only) |
-| 5 | SSH Key Generation | Ephemeral keypair generation |
-| 6 | Certificate Generation | Ephemeral self-signed cert generation (capped validity) |
-| 7 | Test Data Generator | Upload XML, select fields, generate bulk test data with variations |
-| 8 | Groovy IDE | Monaco editor with SAP CPI API stubs, syntax highlighting, and sandboxed execution |
-| 9 | EDI Tools | EDIFACT & ANSI X12 parser, validator, EDI ↔ XML converter, EDI generator |
+| 2 | XSD Generator | Generate XSD schema from a sample XML document |
+| 3 | JSON Formatter | Format and validate JSON |
+| 4 | XML ↔ JSON Converter | Roundtrip-safe conversion preserving namespaces |
+| 5 | PGP Key Generation | Ephemeral keypair generation (POC use only) |
+| 6 | SSH Key Generation | Ephemeral keypair generation |
+| 7 | Certificate Generation | Ephemeral self-signed cert generation (capped validity) |
+| 8 | Test Data Generator | Upload XML, select fields, generate bulk test data with variations |
+| 9 | Groovy IDE | Monaco editor with SAP CPI API stubs, syntax highlighting, and sandboxed execution |
+| 10 | EDI Tools | EDIFACT & ANSI X12 parser, validator, EDI ↔ XML converter, EDI generator (parked) |
 
 ## Architecture
 
