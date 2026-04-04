@@ -4,7 +4,7 @@ export default function KeyGen() {
   return (
     <Card header={<CardHeader titleText="Key Generation" subtitleText="PGP & SSH" />}>
       <div style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <MessageStrip design="Warning" hideCloseButton>
+        <MessageStrip design="Critical" hideCloseButton>
           Keys generated here are for POC and testing purposes only. They are not stored.
           Do not use for production systems.
         </MessageStrip>
