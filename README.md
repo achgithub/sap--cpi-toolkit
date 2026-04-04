@@ -14,6 +14,7 @@ A developer toolkit for SAP Cloud Platform Integration (CPI) built with Go, Reac
 | 6 | Certificate Generation | Ephemeral self-signed cert generation (capped validity) |
 | 7 | Test Data Generator | Upload XML, select fields, generate bulk test data with variations |
 | 8 | Groovy IDE | Monaco editor with SAP CPI API stubs, syntax highlighting, and sandboxed execution |
+| 9 | EDI Tools | EDIFACT & ANSI X12 parser, validator, EDI ↔ XML converter, EDI generator |
 
 ## Architecture
 

@@ -47,6 +47,7 @@ https://github.com/achgithub/sap--cpi-toolkit
 7. Docker Compose (local end-to-end)
 8. Kyma manifests (KEDA, API Rules, Secrets)
 9. Groovy runner (stub pod → full execution engine)
+10. EDI Tools (EDIFACT & ANSI X12 — parser, EDI↔XML converter, generator)
 
 ## Development Workflow
 

@@ -122,6 +122,44 @@ A browser-based IDE for writing and testing SAP CPI Groovy scripts, without need
 
 ---
 
+## 9. EDI Tools (EDIFACT & ANSI X12)
+
+Support for the two dominant EDI standards used in B2B integrations and SAP CPI EDI adapter flows.
+
+### Standards Covered
+- **UN/EDIFACT** — United Nations standard, common in European/global supply chains
+- **ANSI X12** — American standard, dominant in US supply chains
+
+### Features
+
+**Parser / Viewer**
+- Upload or paste a raw EDIFACT or X12 file
+- Parse into a structured, human-readable tree (interchange → group → transaction → segment → element)
+- Highlight validation errors (missing mandatory segments, wrong element types, incorrect counts)
+
+**EDI → XML Converter**
+- Convert EDIFACT or X12 to SAP CPI-compatible XML representation
+- Preserves full segment/element hierarchy
+- Output matches the XML structure SAP CPI's EDI adapter produces (for use in mappings)
+
+**XML → EDI Converter**
+- Convert SAP CPI EDI XML back to valid EDIFACT or X12 flat file
+- Useful for testing outbound EDI flows without a trading partner
+
+**EDI Generator**
+- Select a message type (e.g. EDIFACT ORDERS, INVOIC, DESADV; X12 850, 810, 856)
+- Fill in key fields or upload a CSV for bulk generation
+- Produces syntactically valid EDI files for testing CPI EDI adapter inbound flows
+
+### Storage
+- Saved EDI templates in PostgreSQL (named, reusable — same pattern as test data generator)
+
+### Notes
+- EDIFACT and X12 share the same UI tab — a toggle switches between standards
+- Envelope segments (UNB/UNZ for EDIFACT, ISA/IEA for X12) are auto-generated with configurable sender/receiver IDs
+
+---
+
 ## Portal / Shell
 
 The surrounding application shell is a lightweight SAP Fiori-style portal:
