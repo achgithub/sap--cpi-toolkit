@@ -15,7 +15,7 @@ RUN go mod download
 COPY . .
 # Copy React build into the location the portal embeds from
 COPY --from=web-builder /app/web/dist ./cmd/portal/static
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /portal ./cmd/portal
+RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /portal ./cmd/portal
 
 # Stage 3: Minimal runtime image
 FROM gcr.io/distroless/static-debian12

@@ -4,7 +4,8 @@ WORKDIR /app
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /worker ./cmd/worker
+# go mod tidy ensures go.sum is complete; safe to run even when go.sum is absent
+RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /worker ./cmd/worker
 
 # Stage 2: Minimal runtime image
 FROM gcr.io/distroless/static-debian12
