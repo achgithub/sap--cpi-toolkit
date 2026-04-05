@@ -28,10 +28,10 @@ func main() {
 	// XSD generator
 	mux.HandleFunc("/xsd/generate", xsdGenerateHandler)
 
-	// Key / certificate generation — step 4
-	mux.HandleFunc("/keygen/pgp", notImplemented("PGP key generation"))
-	mux.HandleFunc("/keygen/ssh", notImplemented("SSH key generation"))
-	mux.HandleFunc("/keygen/cert", notImplemented("certificate generation"))
+	// Key / certificate generation
+	mux.HandleFunc("/keygen/pgp", pgpHandler)
+	mux.HandleFunc("/keygen/ssh", sshHandler)
+	mux.HandleFunc("/keygen/cert", certHandler)
 
 	// Test data generator — step 5
 	mux.HandleFunc("/testdata/analyse", notImplemented("XML analysis"))
