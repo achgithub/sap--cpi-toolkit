@@ -1,11 +1,24 @@
 // Package testdata provides the XML test data generation engine.
 // It parses a sample XML, identifies leaf fields with auto-detected types,
 // and generates N varied XML documents returned as a ZIP archive.
+//
+// Generation modes per field:
+//   - random     — generate values within type-specific constraints
+//   - fixed      — always use the supplied literal value
+//   - expression — build a value from a template string; {field.path} inserts
+//     another field's generated value, {random} inserts a random value for
+//     this field's type settings
+//
+// A global CSV can be supplied. When present, each CSV row becomes one
+// document (count is ignored). CSV column headers must be field paths.
+// CSV values override random/fixed modes for matched fields; expression
+// fields can reference CSV-supplied values via {field.path}.
 package testdata
 
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/csv"
 	"encoding/xml"
 	"fmt"
 	"io"
@@ -28,8 +41,9 @@ const (
 
 // Generation modes
 const (
-	ModeRandom = "random"
-	ModeFixed  = "fixed"
+	ModeRandom     = "random"
+	ModeFixed      = "fixed"
+	ModeExpression = "expression"
 )
 
 // --- Public types ---
@@ -50,8 +64,9 @@ type AnalyseResult struct {
 type FieldConfig struct {
 	Path          string  `json:"path"`
 	Type          string  `json:"type"`
-	Mode          string  `json:"mode"` // "random" | "fixed"
+	Mode          string  `json:"mode"`                     // "random" | "fixed" | "expression"
 	Value         string  `json:"value,omitempty"`          // fixed mode
+	Expression    string  `json:"expression,omitempty"`     // expression mode template
 	Min           float64 `json:"min,omitempty"`            // integer / decimal random
 	Max           float64 `json:"max,omitempty"`
 	DecimalPlaces int     `json:"decimal_places,omitempty"` // decimal random
@@ -66,6 +81,7 @@ type GenerateRequest struct {
 	Template string        `json:"template"`
 	Count    int           `json:"count"`
 	Fields   []FieldConfig `json:"fields"`
+	CSVData  string        `json:"csv_data,omitempty"` // raw CSV; when set, Count is ignored
 }
 
 // --- XML node ---
@@ -94,15 +110,37 @@ func Analyse(content string) (AnalyseResult, error) {
 	return AnalyseResult{Fields: fields}, nil
 }
 
-// Generate produces Count XML documents with field values varied according to
-// the supplied FieldConfigs, and returns the documents as a ZIP archive.
-// Count is capped at 1000.
+// Generate produces XML documents with field values varied according to the
+// supplied FieldConfigs, and returns the documents as a ZIP archive.
+//
+// If CSVData is set, each CSV row becomes one document (Count is ignored).
+// Otherwise Count documents are generated (capped at 1000).
+//
+// Evaluation order per document:
+//  1. CSV values (override random/fixed for matched paths)
+//  2. random / fixed fields (non-expression, not covered by CSV)
+//  3. expression fields (can reference values from steps 1 and 2)
 func Generate(req GenerateRequest) ([]byte, error) {
-	if req.Count <= 0 {
-		req.Count = 1
+	// Parse CSV if supplied
+	var csvColumns map[string][]string
+	csvRows := 0
+	if strings.TrimSpace(req.CSVData) != "" {
+		var err error
+		csvColumns, csvRows, err = parseCSV(req.CSVData)
+		if err != nil {
+			return nil, fmt.Errorf("CSV: %w", err)
+		}
 	}
-	if req.Count > 1000 {
-		req.Count = 1000
+
+	count := req.Count
+	if csvRows > 0 {
+		count = csvRows
+	}
+	if count <= 0 {
+		count = 1
+	}
+	if count > 1000 {
+		count = 1000
 	}
 
 	rng := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec
@@ -110,21 +148,49 @@ func Generate(req GenerateRequest) ([]byte, error) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
 
-	for i := 1; i <= req.Count; i++ {
+	for i := 0; i < count; i++ {
 		root, err := parseXML(req.Template)
 		if err != nil {
 			return nil, fmt.Errorf("parse template: %w", err)
 		}
+
+		// Step 1: seed computed map with CSV values for this row
+		computed := make(map[string]string)
+		for path, vals := range csvColumns {
+			if i < len(vals) {
+				computed[path] = vals[i]
+			}
+		}
+
+		// Step 2: random / fixed fields (CSV takes precedence)
 		for _, fc := range req.Fields {
-			segs := strings.Split(fc.Path, ".")
-			// segs[0] is the root element name
+			if fc.Mode == ModeExpression {
+				continue
+			}
+			if _, fromCSV := computed[fc.Path]; fromCSV {
+				continue
+			}
+			computed[fc.Path] = generateValue(fc, rng)
+		}
+
+		// Step 3: expression fields
+		for _, fc := range req.Fields {
+			if fc.Mode != ModeExpression {
+				continue
+			}
+			computed[fc.Path] = resolveExpression(fc.Expression, computed, fc, rng)
+		}
+
+		// Apply all computed values to the XML tree
+		for path, val := range computed {
+			segs := strings.Split(path, ".")
 			if len(segs) > 1 && segs[0] == root.Name {
-				val := generateValue(fc, rng)
 				applyValue(root, segs[1:], val)
 			}
 		}
+
 		xmlContent := `<?xml version="1.0" encoding="UTF-8"?>` + "\n" + renderNode(root, 0)
-		fw, err := zw.Create(fmt.Sprintf("record_%04d.xml", i))
+		fw, err := zw.Create(fmt.Sprintf("record_%04d.xml", i+1))
 		if err != nil {
 			return nil, fmt.Errorf("zip create: %w", err)
 		}
@@ -137,6 +203,61 @@ func Generate(req GenerateRequest) ([]byte, error) {
 		return nil, fmt.Errorf("zip close: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+// --- CSV parsing ---
+
+// parseCSV reads CSV content (first row = headers = field paths) and returns
+// a map of path → []string values (one entry per data row) plus the row count.
+func parseCSV(data string) (map[string][]string, int, error) {
+	r := csv.NewReader(strings.NewReader(data))
+	r.TrimLeadingSpace = true
+	records, err := r.ReadAll()
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(records) < 2 {
+		return nil, 0, fmt.Errorf("must have a header row and at least one data row")
+	}
+	headers := records[0]
+	cols := make(map[string][]string, len(headers))
+	for _, h := range headers {
+		cols[strings.TrimSpace(h)] = nil
+	}
+	for _, row := range records[1:] {
+		for i, h := range headers {
+			h = strings.TrimSpace(h)
+			val := ""
+			if i < len(row) {
+				val = strings.TrimSpace(row[i])
+			}
+			cols[h] = append(cols[h], val)
+		}
+	}
+	return cols, len(records) - 1, nil
+}
+
+// --- Expression resolution ---
+
+// tokenRE matches {anything} tokens in an expression string.
+var tokenRE = regexp.MustCompile(`\{([^}]+)\}`)
+
+// resolveExpression replaces {field.path} tokens with their computed values
+// and {random} with a freshly generated value for this field's type settings.
+// Unresolved tokens are left as-is.
+func resolveExpression(expr string, computed map[string]string, fc FieldConfig, rng *rand.Rand) string {
+	return tokenRE.ReplaceAllStringFunc(expr, func(tok string) string {
+		key := tok[1 : len(tok)-1] // strip { }
+		if key == "random" {
+			rfc := fc
+			rfc.Mode = ModeRandom
+			return generateValue(rfc, rng)
+		}
+		if val, ok := computed[key]; ok {
+			return val
+		}
+		return tok // leave unresolved tokens unchanged
+	})
 }
 
 // --- XML parsing ---
@@ -240,8 +361,6 @@ func detectType(val string) string {
 
 // --- Value application ---
 
-// applyValue sets node.Text for all elements matching the path segments.
-// Handles repeated elements by updating all matching siblings.
 func applyValue(node *xmlNode, segs []string, val string) {
 	if len(segs) == 0 {
 		node.Text = val
