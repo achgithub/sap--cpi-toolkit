@@ -50,8 +50,10 @@ export default function Converter() {
     >
       <SegmentedButton
         onSelectionChange={(e) => {
-          const item = (e.detail as unknown as { selectedItem: HTMLElement }).selectedItem
-          const dir = item?.dataset?.dir as Direction | undefined
+          // UI5 v2: detail uses selectedItems (array), not selectedItem
+          const detail = e.detail as unknown as { selectedItems?: HTMLElement[]; selectedItem?: HTMLElement }
+          const item = detail.selectedItems?.[0] ?? detail.selectedItem
+          const dir = item?.getAttribute('data-dir') as Direction | undefined
           if (dir) { setDirection(dir); setInput(''); setOutput(''); setWarnings([]) }
         }}
       >

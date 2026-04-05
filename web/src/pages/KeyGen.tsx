@@ -94,8 +94,9 @@ function PGPSection() {
             <Label>Key Size</Label>
             <SegmentedButton
               onSelectionChange={(e) => {
-                const item = (e.detail as unknown as { selectedItem: HTMLElement }).selectedItem
-                const val  = item?.dataset?.bits
+                const detail = e.detail as unknown as { selectedItems?: HTMLElement[]; selectedItem?: HTMLElement }
+                const item = detail.selectedItems?.[0] ?? detail.selectedItem
+                const val  = item?.getAttribute('data-bits')
                 if (val === '2048' || val === '4096') setBits(Number(val) as 2048 | 4096)
               }}
             >
@@ -162,8 +163,9 @@ function SSHSection() {
             <Label>Key Type</Label>
             <SegmentedButton
               onSelectionChange={(e) => {
-                const item = (e.detail as unknown as { selectedItem: HTMLElement }).selectedItem
-                const val  = item?.dataset?.type
+                const detail = e.detail as unknown as { selectedItems?: HTMLElement[]; selectedItem?: HTMLElement }
+                const item = detail.selectedItems?.[0] ?? detail.selectedItem
+                const val  = item?.getAttribute('data-type')
                 if (val === 'rsa' || val === 'ed25519') setKeyType(val)
               }}
             >
