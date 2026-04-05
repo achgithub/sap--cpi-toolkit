@@ -33,9 +33,9 @@ func main() {
 	mux.HandleFunc("/keygen/ssh", sshHandler)
 	mux.HandleFunc("/keygen/cert", certHandler)
 
-	// Test data generator — step 5
-	mux.HandleFunc("/testdata/analyse", notImplemented("XML analysis"))
-	mux.HandleFunc("/testdata/generate", notImplemented("test data generation"))
+	// Test data generator
+	mux.HandleFunc("/testdata/analyse", testdataAnalyseHandler)
+	mux.HandleFunc("/testdata/generate", testdataGenerateHandler)
 	mux.HandleFunc("/testdata/templates", notImplemented("template management"))
 
 	addr := ":" + port
