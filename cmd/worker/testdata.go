@@ -27,6 +27,26 @@ func testdataAnalyseHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, result)
 }
 
+func testdataCSVTemplateHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	result, err := testdata.GenerateCSVTemplate(req.Content)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	writeJSON(w, result)
+}
+
 func testdataGenerateHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)

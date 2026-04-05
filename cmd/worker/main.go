@@ -36,7 +36,7 @@ func main() {
 	// Test data generator
 	mux.HandleFunc("/testdata/analyse", testdataAnalyseHandler)
 	mux.HandleFunc("/testdata/generate", testdataGenerateHandler)
-	mux.HandleFunc("/testdata/templates", notImplemented("template management"))
+	mux.HandleFunc("/testdata/csv-template", testdataCSVTemplateHandler)
 
 	addr := ":" + port
 	log.Printf("[worker] listening on %s", addr)

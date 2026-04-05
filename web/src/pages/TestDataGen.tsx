@@ -28,6 +28,12 @@ interface Field {
 
 interface AnalyseResponse {
   fields: Field[]
+  repeat_points: string[]
+}
+
+interface CSVTemplateResponse {
+  csv: string
+  repeat_points: string[]
 }
 
 interface FieldConfig {
@@ -100,6 +106,18 @@ function CsvBadge() {
   )
 }
 
+function RepeatBadge() {
+  return (
+    <span style={{
+      fontSize: '0.7rem', fontWeight: 600,
+      padding: '0.15rem 0.45rem', borderRadius: '0.75rem',
+      background: '#e76500', color: '#fff', whiteSpace: 'nowrap',
+    }}>
+      repeat
+    </span>
+  )
+}
+
 function segItem(e: Event) {
   const d = (e as CustomEvent).detail as { selectedItems?: HTMLElement[]; selectedItem?: HTMLElement }
   return d.selectedItems?.[0] ?? d.selectedItem ?? null
@@ -107,6 +125,14 @@ function segItem(e: Event) {
 
 function inpVal(e: Event) {
   return (e.target as unknown as HTMLInputElement).value
+}
+
+function downloadText(content: string, filename: string, mime = 'text/plain') {
+  const blob = new Blob([content], { type: mime })
+  const url  = URL.createObjectURL(blob)
+  const a    = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
 }
 
 // ── Field config panel ───────────────────────────────────────────────────────
@@ -181,7 +207,6 @@ function FieldConfigPanel({ config, allFields, onChange }: {
                 </Button>
               ))}
           </FlexBox>
-          {/* Random sub-settings still apply when {random} is used */}
           <Label style={{ fontSize: '0.75rem', color: 'var(--sapNeutralColor)' }}>
             Random settings for <code>{'{random}'}</code> token:
           </Label>
@@ -265,10 +290,11 @@ function FieldConfigPanel({ config, allFields, onChange }: {
 
 // ── Field row ────────────────────────────────────────────────────────────────
 
-function FieldRow({ field, isSelected, isCsvCovered, config, allFields, onToggle, onConfigChange }: {
+function FieldRow({ field, isSelected, isCsvCovered, isRepeat, config, allFields, onToggle, onConfigChange }: {
   field: Field
   isSelected: boolean
   isCsvCovered: boolean
+  isRepeat: boolean
   config: FieldConfig
   allFields: Field[]
   onToggle: () => void
@@ -292,6 +318,7 @@ function FieldRow({ field, isSelected, isCsvCovered, config, allFields, onToggle
           {field.sample_value || '(empty)'}
         </span>
         <TypeBadge type={field.detected_type} />
+        {isRepeat && <RepeatBadge />}
         {isCsvCovered && <CsvBadge />}
       </FlexBox>
 
@@ -314,38 +341,76 @@ function FieldRow({ field, isSelected, isCsvCovered, config, allFields, onToggle
 
 // ── CSV preview (client-side, for feedback only) ─────────────────────────────
 
-function parseCsvPreview(raw: string): { columns: string[]; rowCount: number; error: string | null } {
+function parseCsvPreview(raw: string): { columns: string[]; rowCount: number; docCount: number; isNested: boolean; error: string | null } {
   const lines = raw.trim().split('\n').filter(Boolean)
-  if (lines.length < 2) return { columns: [], rowCount: 0, error: 'Need at least a header row and one data row.' }
+  if (lines.length < 2) return { columns: [], rowCount: 0, docCount: 0, isNested: false, error: 'Need at least a header row and one data row.' }
   const columns = lines[0].split(',').map(s => s.trim().replace(/^"|"$/g, ''))
-  return { columns, rowCount: lines.length - 1, error: null }
+  const isNested = columns[0] === '__doc__'
+  const rowCount = lines.length - 1
+
+  let docCount = rowCount
+  if (isNested) {
+    const docCol = 0
+    const docs = new Set(lines.slice(1).map(l => l.split(',')[docCol]?.trim()))
+    docCount = docs.size
+  }
+
+  return { columns, rowCount, docCount, isNested, error: null }
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TestDataGen() {
-  const [xml,        setXml]        = useState('')
-  const [fields,     setFields]     = useState<Field[]>([])
-  const [selected,   setSelected]   = useState<Set<string>>(new Set())
-  const [configs,    setConfigs]    = useState<Record<string, FieldConfig>>({})
-  const [count,      setCount]      = useState('10')
-  const [csvRaw,     setCsvRaw]     = useState('')
-  const [csvPreview, setCsvPreview] = useState<{ columns: string[]; rowCount: number; error: string | null } | null>(null)
-  const [generating, setGenerating] = useState(false)
-  const [genError,   setGenError]   = useState<string | null>(null)
+  const [xml,            setXml]            = useState('')
+  const [fields,         setFields]         = useState<Field[]>([])
+  const [repeatPoints,   setRepeatPoints]   = useState<string[]>([])
+  const [selected,       setSelected]       = useState<Set<string>>(new Set())
+  const [configs,        setConfigs]        = useState<Record<string, FieldConfig>>({})
+  const [count,          setCount]          = useState('10')
+  const [csvRaw,         setCsvRaw]         = useState('')
+  const [csvPreview,     setCsvPreview]     = useState<ReturnType<typeof parseCsvPreview> | null>(null)
+  const [generating,     setGenerating]     = useState(false)
+  const [genError,       setGenError]       = useState<string | null>(null)
+  const [csvTplLoading,  setCsvTplLoading]  = useState(false)
+  const [csvTplError,    setCsvTplError]    = useState<string | null>(null)
 
   const { post, loading: analysing, error: analyseError } = useWorker<{ content: string }, AnalyseResponse>()
 
   // ── Analyse ──
 
   const analyse = async () => {
-    setFields([]); setSelected(new Set()); setConfigs({}); setGenError(null)
+    setFields([]); setRepeatPoints([]); setSelected(new Set()); setConfigs({}); setGenError(null)
     const res = await post('/testdata/analyse', { content: xml })
     if (res) {
       setFields(res.fields)
+      setRepeatPoints(res.repeat_points ?? [])
       const init: Record<string, FieldConfig> = {}
       for (const f of res.fields) init[f.path] = defaultConfig(f)
       setConfigs(init)
+    }
+  }
+
+  // ── CSV Template download ──
+
+  const downloadCsvTemplate = async () => {
+    setCsvTplLoading(true); setCsvTplError(null)
+    try {
+      const resp = await fetch('/api/worker/testdata/csv-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: xml }),
+      })
+      if (!resp.ok) {
+        const json = await resp.json().catch(() => ({}))
+        setCsvTplError(json.error ?? `HTTP ${resp.status}`)
+        return
+      }
+      const data: CSVTemplateResponse = await resp.json()
+      downloadText(data.csv, 'test_data_template.csv', 'text/csv')
+    } catch (e) {
+      setCsvTplError(e instanceof Error ? e.message : 'Network error')
+    } finally {
+      setCsvTplLoading(false)
     }
   }
 
@@ -356,8 +421,9 @@ export default function TestDataGen() {
     setCsvPreview(raw.trim() ? parseCsvPreview(raw) : null)
   }
 
-  const csvColumns = csvPreview?.columns ?? []
-  const csvActive  = csvPreview != null && csvPreview.error == null && csvPreview.rowCount > 0
+  const csvColumns   = csvPreview?.columns ?? []
+  const csvActive    = csvPreview != null && csvPreview.error == null && csvPreview.rowCount > 0
+  const csvIsNested  = csvPreview?.isNested ?? false
 
   // ── Field selection / config ──
 
@@ -380,7 +446,7 @@ export default function TestDataGen() {
       .filter(Boolean)
 
     const docCount = csvActive
-      ? csvPreview!.rowCount
+      ? (csvIsNested ? (csvPreview!.docCount) : csvPreview!.rowCount)
       : Math.min(1000, Math.max(1, parseInt(count, 10) || 10))
 
     try {
@@ -413,10 +479,16 @@ export default function TestDataGen() {
 
   const selectedCount = selected.size
   const countNum      = csvActive
-    ? csvPreview!.rowCount
+    ? (csvIsNested ? csvPreview!.docCount : csvPreview!.rowCount)
     : Math.min(1000, Math.max(1, parseInt(count, 10) || 10))
 
-  const unmatchedCsvCols = csvColumns.filter(c => fields.length > 0 && !fields.some(f => f.path === c))
+  // For flat CSV, columns that don't match any field path
+  const unmatchedCsvCols = !csvIsNested
+    ? csvColumns.filter(c => fields.length > 0 && !fields.some(f => f.path === c))
+    : []
+
+  // Flat CSV cols that match fields (for coverage display)
+  const flatCsvMatchedCols = !csvIsNested ? csvColumns : []
 
   return (
     <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '1rem' }}>
@@ -427,24 +499,44 @@ export default function TestDataGen() {
           <TextArea
             value={xml}
             rows={12}
-            placeholder={'<Order>\n  <Header>\n    <OrderId>12345</OrderId>\n    <Date>2024-01-15</Date>\n  </Header>\n  <Items>\n    <Item><SKU>ABC-001</SKU><Qty>5</Qty></Item>\n  </Items>\n</Order>'}
+            placeholder={'<Order>\n  <Header>\n    <OrderId>10001</OrderId>\n    <Date>2024-01-15</Date>\n  </Header>\n  <Items>\n    <Item><SKU>ABC-001</SKU><Qty>5</Qty></Item>\n    <Item><SKU>DEF-002</SKU><Qty>2</Qty></Item>\n  </Items>\n</Order>'}
             style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
             onInput={(e) => { setXml((e.target as unknown as HTMLTextAreaElement).value); setFields([]) }}
           />
           {analyseError && <MessageStrip design="Negative" hideCloseButton>{analyseError}</MessageStrip>}
+          {csvTplError  && <MessageStrip design="Negative" hideCloseButton>{csvTplError}</MessageStrip>}
           <Toolbar>
             <Button design="Emphasized" disabled={!xml.trim() || analysing} onClick={analyse}>
               {analysing ? 'Analysing…' : 'Analyse XML'}
             </Button>
             {fields.length > 0 && (
+              <Button
+                design="Default"
+                icon="download"
+                disabled={csvTplLoading}
+                onClick={downloadCsvTemplate}
+              >
+                {csvTplLoading ? 'Generating…' : 'Download CSV Template'}
+              </Button>
+            )}
+            {fields.length > 0 && (
               <Button design="Transparent" onClick={() => {
-                setXml(''); setFields([]); setSelected(new Set()); setConfigs({})
+                setXml(''); setFields([]); setRepeatPoints([]); setSelected(new Set()); setConfigs({})
                 setCsvRaw(''); setCsvPreview(null)
               }}>
                 Clear All
               </Button>
             )}
           </Toolbar>
+          {fields.length > 0 && repeatPoints.length > 0 && (
+            <MessageStrip design="Information" hideCloseButton>
+              <strong>{repeatPoints.length} repeat point{repeatPoints.length !== 1 ? 's' : ''} detected</strong> —
+              elements that appear more than once per document.
+              Use <strong>Download CSV Template</strong> to get a pre-built template with a <code>__doc__</code> column
+              that supports nested 1:N structures.
+              Repeat paths: <code>{repeatPoints.join(', ')}</code>
+            </MessageStrip>
+          )}
         </FlexBox>
       </Card>
 
@@ -453,27 +545,38 @@ export default function TestDataGen() {
         <Card header={
           <CardHeader
             titleText="2. CSV Data (optional)"
-            subtitleText="Each row becomes one document — column headers must be field paths"
+            subtitleText="Supply a CSV to drive document generation — flat or nested"
           />
         }>
           <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
             <MessageStrip design="Information" hideCloseButton>
-              Column headers must exactly match field paths shown below (e.g.{' '}
-              <code>Order.Header.OrderId</code>). Leave blank to use count-based generation instead.
+              <strong>Flat CSV</strong> — column headers = field paths (e.g. <code>Order.Header.OrderId</code>).
+              One row = one document. Leave blank to use count-based generation.<br />
+              <strong>Nested CSV</strong> — use <em>Download CSV Template</em> above to generate a template with
+              a <code>__doc__</code> column. Rows sharing the same <code>__doc__</code> value build one document;
+              repeating elements are expanded automatically. Field configs below are ignored in this mode.
             </MessageStrip>
             <TextArea
               value={csvRaw}
-              rows={6}
-              placeholder={'Order.Header.OrderId,Order.Header.Date,Order.Items.Item.SKU\n10001,2024-01-15,ABC-001\n10002,2024-01-16,DEF-002\n10003,2024-01-17,GHI-003'}
+              rows={8}
+              placeholder={repeatPoints.length > 0
+                ? '__doc__,Order.Header.OrderId,Order.Header.Date,Order.Items.Item.SKU,Order.Items.Item.Qty\n1,10001,2024-01-15,ABC-001,5\n1,10001,2024-01-15,DEF-002,2\n2,10002,2024-01-16,GHI-003,10'
+                : 'Order.Header.OrderId,Order.Header.Date\n10001,2024-01-15\n10002,2024-01-16\n10003,2024-01-17'}
               style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
               onInput={(e) => onCsvChange((e.target as unknown as HTMLTextAreaElement).value)}
             />
             {csvPreview?.error && (
               <MessageStrip design="Negative" hideCloseButton>{csvPreview.error}</MessageStrip>
             )}
-            {csvActive && (
+            {csvActive && csvIsNested && (
               <MessageStrip design="Positive" hideCloseButton>
-                {csvPreview!.rowCount} row{csvPreview!.rowCount !== 1 ? 's' : ''} detected.
+                Nested CSV — <strong>{csvPreview!.docCount} document{csvPreview!.docCount !== 1 ? 's' : ''}</strong> across {csvPreview!.rowCount} row{csvPreview!.rowCount !== 1 ? 's' : ''}.
+                Repeat points will be expanded from grouped rows.
+              </MessageStrip>
+            )}
+            {csvActive && !csvIsNested && (
+              <MessageStrip design="Positive" hideCloseButton>
+                {csvPreview!.rowCount} row{csvPreview!.rowCount !== 1 ? 's' : ''} detected (flat CSV).
                 Columns: <strong>{csvColumns.join(', ')}</strong>
                 {unmatchedCsvCols.length > 0 && (
                   <> — <span style={{ color: '#e76500' }}>
@@ -496,14 +599,20 @@ export default function TestDataGen() {
         <Card header={
           <CardHeader
             titleText="3. Configure Fields"
-            subtitleText={`${fields.length} fields found — check the fields to vary`}
+            subtitleText={`${fields.length} field${fields.length !== 1 ? 's' : ''} found — check the fields to vary`}
           />
         }>
           <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '0.5rem 0' }}>
-            <MessageStrip design="Information" hideCloseButton style={{ margin: '0 0.75rem 0.5rem' }}>
-              Repeated elements share one path entry — all instances in a document receive the same generated value.
-              Expression mode lets you build a value from other fields using <code>{'{field.path}'}</code>.
-            </MessageStrip>
+            {csvIsNested ? (
+              <MessageStrip design="Information" hideCloseButton style={{ margin: '0 0.75rem 0.5rem' }}>
+                Nested CSV mode is active — all values come from the CSV. Field configs are ignored.
+              </MessageStrip>
+            ) : (
+              <MessageStrip design="Information" hideCloseButton style={{ margin: '0 0.75rem 0.5rem' }}>
+                Repeated elements share one path entry — all instances in a document receive the same generated value.
+                Expression mode lets you build a value from other fields using <code>{'{field.path}'}</code>.
+              </MessageStrip>
+            )}
             {/* Column headers */}
             <div style={{
               display: 'flex', padding: '0.4rem 0.75rem',
@@ -520,7 +629,8 @@ export default function TestDataGen() {
                 key={field.path}
                 field={field}
                 isSelected={selected.has(field.path)}
-                isCsvCovered={csvActive && csvColumns.includes(field.path)}
+                isCsvCovered={csvActive && !csvIsNested && flatCsvMatchedCols.includes(field.path)}
+                isRepeat={repeatPoints.some(rp => field.path.startsWith(rp + '.') || field.path === rp)}
                 config={configs[field.path]}
                 allFields={fields}
                 onToggle={() => toggleField(field.path)}
@@ -550,7 +660,10 @@ export default function TestDataGen() {
 
             {csvActive && (
               <MessageStrip design="Information" hideCloseButton>
-                Count is determined by the CSV: <strong>{csvPreview!.rowCount} documents</strong> will be generated.
+                {csvIsNested
+                  ? <>Count from nested CSV: <strong>{csvPreview!.docCount} document{csvPreview!.docCount !== 1 ? 's' : ''}</strong> ({csvPreview!.rowCount} rows).</>
+                  : <>Count from flat CSV: <strong>{csvPreview!.rowCount} document{csvPreview!.rowCount !== 1 ? 's' : ''}</strong>.</>
+                }
               </MessageStrip>
             )}
 
@@ -570,11 +683,13 @@ export default function TestDataGen() {
               </Button>
               <ToolbarSpacer />
               <Label style={{ color: 'var(--sapNeutralColor)' }}>
-                {csvActive
-                  ? `${csvColumns.filter(c => fields.some(f => f.path === c)).length} field${csvColumns.length !== 1 ? 's' : ''} from CSV`
-                  : selectedCount > 0
-                    ? `${selectedCount} field${selectedCount !== 1 ? 's' : ''} will vary`
-                    : ''}
+                {csvIsNested
+                  ? `Nested CSV — repeat points expanded`
+                  : csvActive
+                    ? `${flatCsvMatchedCols.filter(c => fields.some(f => f.path === c)).length} field${flatCsvMatchedCols.length !== 1 ? 's' : ''} from CSV`
+                    : selectedCount > 0
+                      ? `${selectedCount} field${selectedCount !== 1 ? 's' : ''} will vary`
+                      : ''}
               </Label>
             </Toolbar>
           </FlexBox>
