@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: worker-config
+data:
+  PORT: "8081"
+  KEY_VALIDITY_MAX_DAYS: "365"
+  CERT_VALIDITY_MAX_DAYS: "90"

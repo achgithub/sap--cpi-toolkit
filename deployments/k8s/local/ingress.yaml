@@ -1,0 +1,26 @@
+# Nginx ingress — routes all traffic to the portal service.
+# Portal proxies /api/worker/* and /api/groovy/* internally.
+#
+# Proxy timeouts are generous to allow slow operations (ZIP generation,
+# cert creation) through without 504s.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: portal
+  namespace: sap-cpi-toolkit
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "16m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: portal
+                port:
+                  number: 80

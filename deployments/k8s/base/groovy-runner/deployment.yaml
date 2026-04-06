@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: groovy-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: groovy-runner
+  template:
+    metadata:
+      labels:
+        app: groovy-runner
+    spec:
+      containers:
+        - name: groovy-runner
+          image: sap-cpi-toolkit/groovy-runner:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8082
+          env:
+            - name: PORT
+              value: "8082"
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 512Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8082
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8082
+            initialDelaySeconds: 30
+            periodSeconds: 15

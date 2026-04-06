@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ── BTP Kyma overlay (stub — complete when trial is available) ────────────────
+#
+# TODOs when BTP trial is active:
+#   1. Replace portal/secret.yaml with a BTP IAS service binding or populate
+#      via: kubectl create secret generic ias -n sap-cpi-toolkit \
+#             --from-literal=IAS_CLIENT_ID=... \
+#             --from-literal=IAS_CLIENT_SECRET=... \
+#             --from-literal=IAS_TENANT_URL=https://<tenant>.accounts.ondemand.com
+#   2. Add apirule.yaml (Kyma APIRule CRD) to expose portal via API Gateway
+#   3. Patch portal ConfigMap: DEPLOYMENT_ENV=kyma, AUTH_BYPASS_ENABLED=false
+#   4. Add keda/ ScaledObjects for worker and groovy-runner (scale to zero)
+#   5. Update BASE_URL to the Kyma API Gateway hostname
+# ─────────────────────────────────────────────────────────────────────────────
+
+resources:
+  - ../base

@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# ── Docker Desktop Kubernetes overlay ────────────────────────────────────────
+#
+# Prerequisites:
+#   1. Enable Kubernetes in Docker Desktop → Settings → Kubernetes
+#   2. Install nginx ingress controller (one-time):
+#        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.1/deploy/static/provider/cloud/deploy.yaml
+#        kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
+#
+# Build images (run from repo root):
+#   docker build -f Dockerfile.portal       -t sap-cpi-toolkit/portal:latest .
+#   docker build -f Dockerfile.worker       -t sap-cpi-toolkit/worker:latest .
+#   docker build -f groovy-runner/Dockerfile -t sap-cpi-toolkit/groovy-runner:latest groovy-runner/
+#
+# Deploy:
+#   kubectl apply -k deployments/k8s/local
+#
+# Access:  http://localhost
+#
+# Tear down:
+#   kubectl delete -k deployments/k8s/local
+# ─────────────────────────────────────────────────────────────────────────────
+
+resources:
+  - ../base
+  - ingress.yaml
