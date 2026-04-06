@@ -878,13 +878,12 @@ def Message processData(Message message) {
     complexity: 'Intermediate',
     tags: ['Attachments'],
     body: `import com.sap.gateway.ip.core.customdev.util.Message
-import javax.activation.DataHandler
 
 def Message processData(Message message) {
     def props   = message.getProperties()
     def pattern = (props.get("AttachmentNamePattern") ?: "invoice").toString().toLowerCase()
 
-    def attachments = message.getAttachments() as Map<String, DataHandler>
+    def attachments = message.getAttachments()
     if (!attachments) throw new Exception("No attachments found on this message")
 
     def mpl = messageLogFactory.getMessageLog(message)
@@ -902,7 +901,7 @@ def Message processData(Message message) {
     }
 
     def matchName = match.key
-    def matchDH   = match.value as DataHandler
+    def matchDH   = match.value
 
     message.setBody(matchDH.getContent())
     message.setHeader("AttachmentName",        matchName)
