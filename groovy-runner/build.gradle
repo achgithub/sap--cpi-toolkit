@@ -22,6 +22,9 @@ dependencies {
     implementation 'org.apache.groovy:groovy-json:4.0.21'
     implementation 'org.apache.groovy:groovy-xml:4.0.21'
     implementation 'org.apache.groovy:groovy-templates:4.0.21'
+    // Date extension methods: new Date().format(...), Date.parse(...) etc.
+    // Groovy 4.x split these out of core into groovy-dateutil
+    implementation 'org.apache.groovy:groovy-dateutil:4.0.21'
 }
 
 shadowJar {
