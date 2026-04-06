@@ -21,13 +21,22 @@ class MockMessage implements Message {
     @Override
     def <T> T getBody(Class<T> type) {
         if (type == String || type == null) {
+            if (body instanceof InputStream) {
+                return (T) ((InputStream) body).getText('UTF-8')
+            }
+            if (body instanceof byte[]) {
+                return (T) new String((byte[]) body, 'UTF-8')
+            }
             return (T) body?.toString()
         }
         if (type == InputStream) {
-            def bytes = body?.toString()?.bytes ?: new byte[0]
+            if (body instanceof InputStream) return (T) body
+            def bytes = body instanceof byte[] ? (byte[]) body : body?.toString()?.bytes ?: new byte[0]
             return (T) new ByteArrayInputStream(bytes)
         }
         if (type == byte[]) {
+            if (body instanceof byte[])      return (T) body
+            if (body instanceof InputStream) return (T) ((InputStream) body).bytes
             return (T) (body?.toString()?.bytes ?: new byte[0])
         }
         // Fallback: return as-is and let Groovy coerce
