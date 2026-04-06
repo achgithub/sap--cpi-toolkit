@@ -355,6 +355,7 @@ def Message processData(Message message) {
     complexity: 'Intermediate',
     tags: ['XML'],
     body: `import com.sap.gateway.ip.core.customdev.util.Message
+import groovy.util.XmlSlurper
 import groovy.xml.XmlUtil
 
 def Message processData(Message message) {
@@ -827,6 +828,7 @@ def Message processData(Message message) {
     complexity: 'Intermediate',
     tags: ['XML', 'Conversion'],
     body: `import com.sap.gateway.ip.core.customdev.util.Message
+import groovy.util.XmlSlurper
 
 def Message processData(Message message) {
     def props = message.getProperties()
@@ -925,6 +927,7 @@ def Message processData(Message message) {
     complexity: 'Advanced',
     tags: ['IDoc'],
     body: `import com.sap.gateway.ip.core.customdev.util.Message
+import groovy.util.XmlSlurper
 import groovy.xml.MarkupBuilder
 
 def Message processData(Message message) {
