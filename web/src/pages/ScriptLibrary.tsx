@@ -2,11 +2,9 @@ import { useState, useMemo } from 'react'
 import {
   Button,
   Card,
-  CardHeader,
   FlexBox,
   FlexBoxDirection,
   FlexBoxAlignItems,
-  FlexBoxWrap,
   Input,
   Label,
   MessageStrip,
@@ -135,7 +133,7 @@ function ScriptCard({
       {/* ── Tenant-only warning ── */}
       {script.tenantOnly && (
         <div style={{ padding: '0 1rem 0.5rem' }}>
-          <MessageStrip design="Warning" hideCloseButton>
+          <MessageStrip design="Critical" hideCloseButton>
             The ITApiFactory calls in this script are commented out — the script loads fine
             in the IDE but only works when deployed on a CPI tenant. See comments in the code.
           </MessageStrip>
@@ -224,7 +222,7 @@ export default function ScriptLibrary({ onLoadInIDE }: { onLoadInIDE: (body: str
               value={search}
               placeholder="Filter by title, description or tag…"
               style={{ flex: 1 }}
-              onInput={(e) => setSearch((e.target as HTMLInputElement).value)}
+              onInput={(e) => setSearch((e.target as unknown as HTMLInputElement).value)}
             />
             {(search || complexity !== 'All' || activeTag) && (
               <Button design="Transparent" onClick={() => { setSearch(''); setComplexity('All'); setActiveTag('') }}>
