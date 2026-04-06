@@ -16,6 +16,7 @@ import KeyGen from './pages/KeyGen'
 import CertGen from './pages/CertGen'
 import TestDataGen from './pages/TestDataGen'
 import GroovyIDE from './pages/GroovyIDE'
+import EDITools from './pages/EDITools'
 
 type ToolTab =
   | 'xml-formatter'
@@ -26,6 +27,7 @@ type ToolTab =
   | 'certgen'
   | 'testdata'
   | 'groovy'
+  | 'edi'
 
 const TABS: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'xml-formatter',  label: 'XML Formatter',  icon: 'syntax'        },
@@ -36,6 +38,7 @@ const TABS: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'certgen',        label: 'Certificates',   icon: 'certificate'   },
   { id: 'testdata',       label: 'Test Data',      icon: 'simulate'      },
   { id: 'groovy',         label: 'Groovy IDE',     icon: 'terminal'      },
+  { id: 'edi',            label: 'EDI Tools',      icon: 'curriculum'    },
 ]
 
 export default function App() {
@@ -78,6 +81,7 @@ export default function App() {
         {activeTab === 'certgen'        && <CertGen />}
         {activeTab === 'testdata'       && <TestDataGen />}
         {activeTab === 'groovy'         && <GroovyIDE />}
+        {activeTab === 'edi'            && <EDITools />}
       </div>
     </FlexBox>
   )

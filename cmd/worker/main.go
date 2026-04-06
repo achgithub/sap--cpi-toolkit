@@ -33,6 +33,12 @@ func main() {
 	mux.HandleFunc("/keygen/ssh", sshHandler)
 	mux.HandleFunc("/keygen/cert", certHandler)
 
+	// EDI tools
+	mux.HandleFunc("/edi/parse", ediParseHandler)
+	mux.HandleFunc("/edi/to-xml", ediToXMLHandler)
+	mux.HandleFunc("/edi/from-xml", ediFromXMLHandler)
+	mux.HandleFunc("/edi/generate", ediGenerateHandler)
+
 	// Test data generator
 	mux.HandleFunc("/testdata/analyse", testdataAnalyseHandler)
 	mux.HandleFunc("/testdata/generate", testdataGenerateHandler)
