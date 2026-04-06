@@ -5,7 +5,6 @@ import {
   CardHeader,
   FlexBox,
   FlexBoxDirection,
-  FlexBoxAlignItems,
   Label,
   MessageStrip,
   SegmentedButton,
