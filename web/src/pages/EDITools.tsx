@@ -168,8 +168,9 @@ export default function EDITools() {
     useWorker<{ content: string }, ParseResult>()
 
   // EDI → XML mode
-  const [toXmlInput,  setToXmlInput]  = useState(SAMPLE_EDIFACT)
-  const [toXmlResult, setToXmlResult] = useState('')
+  const [toXmlInput,   setToXmlInput]   = useState(SAMPLE_EDIFACT)
+  const [toXmlResult,  setToXmlResult]  = useState('')
+  const [toXmlFormat,  setToXmlFormat]  = useState<'semantic' | 'technical'>('semantic')
   const { post: toXmlPost, loading: toXmlLoading, error: toXmlErr } =
     useWorker<{ content: string }, { xml: string }>()
 
@@ -200,7 +201,8 @@ export default function EDITools() {
 
   const doToXml = async () => {
     setToXmlResult('')
-    const res = await toXmlPost('/edi/to-xml', { content: toXmlInput })
+    const endpoint = toXmlFormat === 'semantic' ? '/edi/to-semantic-xml' : '/edi/to-xml'
+    const res = await toXmlPost(endpoint, { content: toXmlInput })
     if (res) setToXmlResult(res.xml)
   }
 
@@ -314,8 +316,34 @@ export default function EDITools() {
 
       {/* ── EDI → XML ── */}
       {mode === 'to-xml' && (
-        <Card header={<CardHeader titleText="EDI → XML" subtitleText="Convert EDIFACT or X12 to SAP CPI-compatible XML" />}>
+        <Card header={<CardHeader
+          titleText="EDI → XML"
+          subtitleText={toXmlFormat === 'semantic'
+            ? 'Semantic — business-named elements grouped for SAP CPI mapping'
+            : 'Technical — preserves raw segment/element structure for round-trip'}
+        />}>
           <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
+
+            {/* Format toggle */}
+            <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.75rem' }}>
+              <Label style={{ fontWeight: 600 }}>XML Format</Label>
+              <SegmentedButton
+                onSelectionChange={(e) => {
+                  const v = segItem(e as unknown as Event)?.getAttribute('data-fmt') as 'semantic' | 'technical'
+                  if (v) { setToXmlFormat(v); setToXmlResult('') }
+                }}
+              >
+                <SegmentedButtonItem data-fmt="semantic"  selected={toXmlFormat === 'semantic'}>Semantic</SegmentedButtonItem>
+                <SegmentedButtonItem data-fmt="technical" selected={toXmlFormat === 'technical'}>Technical</SegmentedButtonItem>
+              </SegmentedButton>
+            </FlexBox>
+
+            {toXmlFormat === 'technical' && (
+              <MessageStrip design="Information" hideCloseButton>
+                Technical XML preserves the raw segment/element/component structure and can be converted back to EDI using the <strong>XML → EDI</strong> mode.
+              </MessageStrip>
+            )}
+
             <Label style={{ fontWeight: 600 }}>EDI Input</Label>
             <TextArea
               value={toXmlInput}
@@ -354,7 +382,7 @@ export default function EDITools() {
         <Card header={<CardHeader titleText="XML → EDI" subtitleText="Convert toolkit EDI XML back to raw EDIFACT or X12" />}>
           <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
             <MessageStrip design="Information" hideCloseButton>
-              Paste the XML produced by the <strong>EDI → XML</strong> tool.
+              Paste the <strong>Technical</strong> XML produced by the <strong>EDI → XML</strong> tool (not Semantic).
               The <code>standard</code> attribute on the root element determines the output format.
             </MessageStrip>
             <Label style={{ fontWeight: 600 }}>XML Input</Label>

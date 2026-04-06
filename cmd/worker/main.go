@@ -36,6 +36,7 @@ func main() {
 	// EDI tools
 	mux.HandleFunc("/edi/parse", ediParseHandler)
 	mux.HandleFunc("/edi/to-xml", ediToXMLHandler)
+	mux.HandleFunc("/edi/to-semantic-xml", ediToSemanticXMLHandler)
 	mux.HandleFunc("/edi/from-xml", ediFromXMLHandler)
 	mux.HandleFunc("/edi/generate", ediGenerateHandler)
 

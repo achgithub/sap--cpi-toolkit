@@ -52,6 +52,31 @@ func ediToXMLHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"xml": xmlStr})
 }
 
+func ediToSemanticXMLHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	result, err := edi.Parse(req.Content)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	xmlStr, err := edi.ToSemanticXML(&result)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]string{"xml": xmlStr})
+}
+
 func ediFromXMLHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
