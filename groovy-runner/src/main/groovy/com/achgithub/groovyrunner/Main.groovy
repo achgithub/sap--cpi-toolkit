@@ -11,8 +11,9 @@ import java.util.concurrent.Executors
  * Minimal HTTP server for the Groovy runner service.
  *
  * Routes:
- *   GET  /health          → 200 "ok"
- *   POST /groovy/execute  → execute a CPI Groovy script, return JSON result
+ *   GET  /health   → 200 "ok"
+ *   POST /execute  → execute a CPI Groovy script, return JSON result
+ *                    (portal strips /api/groovy prefix before forwarding)
  *
  * Request body for /groovy/execute:
  *   {
@@ -42,7 +43,7 @@ class Main {
             respond(ex, 200, 'ok', 'text/plain')
         }
 
-        server.createContext('/groovy/execute') { HttpExchange ex ->
+        server.createContext('/execute') { HttpExchange ex ->
             if (ex.requestMethod != 'POST') {
                 jsonError(ex, 405, 'method not allowed')
                 return
