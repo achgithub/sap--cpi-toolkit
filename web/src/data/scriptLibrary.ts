@@ -64,6 +64,66 @@ SAP_MessageProcessingLogID: MPL-IDE-2026-001
 SenderSystemID: S4H-CLNT100
 X-CorrelationID: CORR-2026-ABC-001`
 
+const JSON_HEADERS = `Content-Type: application/json
+SAP_MessageProcessingLogID: MPL-IDE-2026-001
+SenderSystemID: S4H-CLNT100
+X-CorrelationID: CORR-2026-ABC-001`
+
+const SAMPLE_JSON_ORDER = `{"Order":{"Header":{"OrderID":"ORD-2026-001","OrderDate":"20260115","Currency":"EUR","BuyerName":"ACME Corp"},"Items":{"Item":[{"LineNumber":"1","MaterialNumber":"MAT-001","Description":"Industrial Widget Type A","Quantity":"50","Unit":"EA","UnitPrice":"12.50"},{"LineNumber":"2","MaterialNumber":"MAT-002","Description":"Steel Bracket 200mm","Quantity":"100","Unit":"EA","UnitPrice":"4.75"}]}}}`
+
+const SAMPLE_JSON_STRING_TYPED = `{"IsActive":"true","IsBlocked":"false","TotalItems":"2","NetAmount":"1100.00","Items":[{"LineNumber":"1","Quantity":"50","UnitPrice":"12.50","Taxable":"true","Description":"Industrial Widget Type A"},{"LineNumber":"2","Quantity":"100","UnitPrice":"4.75","Taxable":"false","Description":"Steel Bracket 200mm"}]}`
+
+const SAMPLE_XML_FOR_CSV = `<?xml version="1.0" encoding="UTF-8"?>
+<PurchaseOrder>
+  <Items>
+    <Item>
+      <MaterialNumber>MAT-001</MaterialNumber>
+      <Description>Industrial Widget Type A</Description>
+      <Quantity>50</Quantity>
+      <Unit>EA</Unit>
+      <UnitPrice>12.50</UnitPrice>
+    </Item>
+    <Item>
+      <MaterialNumber>MAT-002</MaterialNumber>
+      <Description>Steel Bracket 200mm</Description>
+      <Quantity>100</Quantity>
+      <Unit>EA</Unit>
+      <UnitPrice>4.75</UnitPrice>
+    </Item>
+    <Item>
+      <MaterialNumber>MAT-003</MaterialNumber>
+      <Description>Mounting Kit, Standard</Description>
+      <Quantity>25</Quantity>
+      <Unit>EA</Unit>
+      <UnitPrice>8.90</UnitPrice>
+    </Item>
+  </Items>
+</PurchaseOrder>`
+
+const SAMPLE_IDOC_LONGTEXT = `<?xml version="1.0" encoding="UTF-8"?>
+<ORDERS05>
+  <IDOC BEGIN="1">
+    <E1EDKT1 SEGMENT="1">
+      <TDLINE>This is a very long delivery note text that needs to be split into multiple 132-character segments for proper IDoc processing. The segmentation must respect word boundaries so that words are not split across lines. This ensures the text remains readable when displayed in SAP. Additional text continues here to demonstrate the splitting behaviour across multiple output segments being generated for this example payload.</TDLINE>
+    </E1EDKT1>
+  </IDOC>
+</ORDERS05>`
+
+const SAMPLE_FI_POSTING_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<FIPosting>
+  <Header>
+    <DocumentType>KR</DocumentType>
+    <CompanyCode>1000</CompanyCode>
+    <PostingDate>20260115</PostingDate>
+    <Currency>EUR</Currency>
+  </Header>
+  <Vendor>
+    <VendorID>VEND-001</VendorID>
+    <Name>Global Supplies GmbH</Name>
+  </Vendor>
+  <Amount>1309.00</Amount>
+</FIPosting>`
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const SCRIPTS: LibraryScript[] = [
@@ -177,6 +237,9 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      properties: 'CredentialAlias: BackendSystemPRD',
+    },
   },
 
   // ── 4 ─────────────────────────────────────────────────────────────────────
@@ -228,6 +291,9 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      properties: 'LookupUrl: https://httpbin.org/get\nBackendUser: testuser\nBackendPassword: testpass',
+    },
   },
 
   // ── 5 ─────────────────────────────────────────────────────────────────────
@@ -271,6 +337,11 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      body:       'Hello, SAP CPI World! This is a test payload for Base64 encoding.',
+      headers:    'Content-Type: text/plain',
+      properties: 'Base64Direction: encode',
+    },
   },
 
   // ── 6 ─────────────────────────────────────────────────────────────────────
@@ -312,6 +383,10 @@ def Message processData(Message message) {
     message.setBody(XmlUtil.serialize(doc))
     return message
 }`,
+    sampleInput: {
+      body:    SAMPLE_PO_XML,
+      headers: STANDARD_HEADERS,
+    },
   },
 
   // ── 7 ─────────────────────────────────────────────────────────────────────
@@ -366,6 +441,10 @@ def Message processData(Message message) {
     message.setBody(writer.toString())
     return message
 }`,
+    sampleInput: {
+      headers:    STANDARD_HEADERS,
+      properties: 'CompanyCode: 1000\nDocumentType: KR\nGLAccount: 0000400000\nAmount: 1500.00\nCurrency: EUR\nCostCentre: CC-1000\nTaxCode: V1',
+    },
   },
 
   // ── 8 ─────────────────────────────────────────────────────────────────────
@@ -412,6 +491,10 @@ def Message processData(Message message) {
     message.setBody(JsonOutput.prettyPrint(JsonOutput.toJson(output)))
     return message
 }`,
+    sampleInput: {
+      body:    SAMPLE_JSON_ORDER,
+      headers: JSON_HEADERS,
+    },
   },
 
   // ── 9 ─────────────────────────────────────────────────────────────────────
@@ -451,6 +534,10 @@ def Message processData(Message message) {
     message.setBody(JsonOutput.toJson(json))
     return message
 }`,
+    sampleInput: {
+      body:    SAMPLE_JSON_STRING_TYPED,
+      headers: 'Content-Type: application/json',
+    },
   },
 
   // ── 10 ────────────────────────────────────────────────────────────────────
@@ -506,6 +593,9 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      properties: 'TargetEnvironment: DEV',
+    },
   },
 
   // ── 11 ────────────────────────────────────────────────────────────────────
@@ -554,6 +644,9 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      properties: 'SAPDate: 20260115\nSourceTimezone: UTC\nTargetTimezone: Europe/Berlin',
+    },
   },
 
   // ── 12 ────────────────────────────────────────────────────────────────────
@@ -604,6 +697,10 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      body:    '',
+      headers: 'Content-Type: application/xml',
+    },
   },
 
   // ── 13 ────────────────────────────────────────────────────────────────────
@@ -656,6 +753,10 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      body:    '',
+      headers: 'Content-Type: application/json',
+    },
   },
 
   // ── 14 ────────────────────────────────────────────────────────────────────
@@ -710,6 +811,9 @@ def Message processData(Message message) {
     message.setProperty("TotalPages", totalPages.toString())
     return message
 }`,
+    sampleInput: {
+      properties: "TotalRecordCount: 250\nPageSize: 100\nODataFilter: Status eq 'NEW'",
+    },
   },
 
   // ── 15 ────────────────────────────────────────────────────────────────────
@@ -755,6 +859,10 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      body:       SAMPLE_XML_FOR_CSV,
+      properties: 'CSVSeparator: ,',
+    },
   },
 
   // ── 16 ────────────────────────────────────────────────────────────────────
@@ -801,6 +909,9 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      properties: 'AttachmentNamePattern: invoice',
+    },
   },
 
   // ── 17 ────────────────────────────────────────────────────────────────────
@@ -858,6 +969,10 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      body:    SAMPLE_IDOC_LONGTEXT,
+      headers: 'Content-Type: application/xml',
+    },
   },
 
   // ── 18 ────────────────────────────────────────────────────────────────────
@@ -903,5 +1018,9 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      body:    SAMPLE_FI_POSTING_XML,
+      headers: 'Content-Type: application/xml\nSenderSystemID: S4H-CLNT100\nSAP_MessageProcessingLogID: MPL-IDE-2026-001',
+    },
   },
 ]
