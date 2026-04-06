@@ -1,0 +1,37 @@
+plugins {
+    id 'groovy'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+    id 'application'
+}
+
+group   = 'com.achgithub'
+version = '1.0.0'
+
+application {
+    mainClass = 'com.achgithub.groovyrunner.Main'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Core Groovy runtime (needed to compile and run user scripts at runtime)
+    implementation 'org.apache.groovy:groovy:4.0.21'
+    // Groovy modules commonly used in CPI scripts
+    implementation 'org.apache.groovy:groovy-json:4.0.21'
+    implementation 'org.apache.groovy:groovy-xml:4.0.21'
+    implementation 'org.apache.groovy:groovy-templates:4.0.21'
+}
+
+shadowJar {
+    archiveBaseName    = 'groovy-runner'
+    archiveClassifier  = ''
+    archiveVersion     = ''
+    manifest {
+        attributes 'Main-Class': 'com.achgithub.groovyrunner.Main'
+    }
+}
+
+// Make the standard 'build' task produce the fat JAR
+build.dependsOn shadowJar

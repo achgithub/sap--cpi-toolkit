@@ -1,12 +1,25 @@
-# Groovy Runner — stub
-# Full implementation comes in step 9.
-# For now: starts and responds to /health so the stack comes up cleanly.
+# ── Stage 1: Build fat JAR ────────────────────────────────────────────────────
+FROM gradle:8-jdk21-alpine AS build
+WORKDIR /app
+
+# Cache dependency downloads before copying source
+COPY settings.gradle build.gradle ./
+RUN gradle dependencies --no-daemon --quiet
+
+# Build
+COPY src ./src
+RUN gradle shadowJar --no-daemon --quiet
+
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+COPY --from=build /app/build/libs/groovy-runner.jar .
 
 EXPOSE 8082
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=3 \
   CMD wget -qO- http://localhost:8082/health || exit 1
 
-# Serve a minimal HTTP health response using BusyBox nc (no -q flag on Alpine)
-CMD ["sh", "-c", "while true; do printf 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nContent-Type: text/plain\r\n\r\nok' | nc -l -p 8082; done"]
+# -Xmx keeps the JVM within the pod memory limit
+CMD ["java", "-Xmx400m", "-jar", "groovy-runner.jar"]
