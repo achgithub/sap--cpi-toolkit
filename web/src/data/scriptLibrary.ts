@@ -370,10 +370,12 @@ def Message processData(Message message) {
     doc.Header.Status = "PROCESSING"
 
     // ── Append new child elements ───────────────────────────────────────────
+    def nowFmt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    nowFmt.setTimeZone(TimeZone.getTimeZone("UTC"))
+    def nowStr = nowFmt.format(new Date())
+
     doc.Header.appendNode {
-        ProcessedAt(
-            new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone("UTC"))
-        )
+        ProcessedAt(nowStr)
         ProcessedBy("CPI-IFLOW")
     }
 
@@ -412,7 +414,7 @@ def Message processData(Message message) {
     def glAccount    = props.get("GLAccount")     ?: "0000400000"
     def amount       = props.get("Amount")        ?: "0.00"
     def currency     = props.get("Currency")      ?: "EUR"
-    def postingDate  = new Date().format("yyyyMMdd")
+    def postingDate  = new java.text.SimpleDateFormat("yyyyMMdd").format(new Date())
     def correlationId = headers.get("SAP_MessageProcessingLogID") ?: UUID.randomUUID().toString()
 
     def writer = new StringWriter()
@@ -425,9 +427,11 @@ def Message processData(Message message) {
             DocumentType(documentType)
             PostingDate(postingDate)
             CorrelationID(correlationId)
-            CreatedAt(
-                new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone("UTC"))
-            )
+            CreatedAt({
+                def f = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
+                f.setTimeZone(TimeZone.getTimeZone("UTC"))
+                f.format(new Date())
+            }())
         }
         LineItems {
             Item(lineNumber: "001") {
@@ -616,7 +620,7 @@ def Message processData(Message message) {
     def props = message.getProperties()
 
     // Input — SAP compact date from a property (e.g. set by a preceding Script or Mapping)
-    def inputStr  = (props.get("SAPDate") ?: new Date().format("yyyyMMdd")) as String
+    def inputStr  = (props.get("SAPDate") ?: new SimpleDateFormat("yyyyMMdd").format(new Date())) as String
     def sourceTZ  = (props.get("SourceTimezone") ?: "UTC") as String
     def targetTZ  = (props.get("TargetTimezone") ?: "Europe/Berlin") as String
 
@@ -687,10 +691,12 @@ def Message processData(Message message) {
     } else {
         // Generic fallback — wrap in a simple error envelope
         def safe = { String s -> s?.replaceAll("&", "&amp;")?.replaceAll("<", "&lt;")?.replaceAll(">", "&gt;") ?: "" }
+        def tsFmt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
+        tsFmt.setTimeZone(TimeZone.getTimeZone("UTC"))
         def errXml = "<Error>" +
             "<Type>" + ex.getClass().getSimpleName() + "</Type>" +
             "<Message>" + safe(ex.getMessage()) + "</Message>" +
-            "<Timestamp>" + new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone("UTC")) + "</Timestamp>" +
+            "<Timestamp>" + tsFmt.format(new Date()) + "</Timestamp>" +
             "</Error>"
         message.setBody(errXml)
         message.setProperty("ErrorType", "GenericException")
@@ -1014,9 +1020,10 @@ def Message processData(Message message) {
     message.setProperty("SenderSystem",  senderSystem)
     message.setProperty("IsCredit",      routingKey.endsWith("CREDIT").toString())
     message.setProperty("ProcessingDate",
-        new Date().format("yyyyMMdd"))
-    message.setProperty("ProcessingTS",
-        new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone("UTC")))
+        new java.text.SimpleDateFormat("yyyyMMdd").format(new Date()))
+    def tsFmt = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'")
+    tsFmt.setTimeZone(TimeZone.getTimeZone("UTC"))
+    message.setProperty("ProcessingTS", tsFmt.format(new Date()))
 
     return message
 }`,

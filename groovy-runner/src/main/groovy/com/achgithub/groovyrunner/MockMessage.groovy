@@ -39,6 +39,11 @@ class MockMessage implements Message {
             if (body instanceof InputStream) return (T) ((InputStream) body).bytes
             return (T) (body?.toString()?.bytes ?: new byte[0])
         }
+        if (type == java.io.Reader) {
+            if (body instanceof java.io.Reader) return (T) body
+            if (body instanceof InputStream)    return (T) new java.io.InputStreamReader((InputStream) body, 'UTF-8')
+            return (T) new java.io.StringReader(body?.toString() ?: '')
+        }
         // Fallback: return as-is and let Groovy coerce
         return (T) body
     }
