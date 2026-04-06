@@ -18,6 +18,7 @@ import TestDataGen from './pages/TestDataGen'
 import GroovyIDE from './pages/GroovyIDE'
 import EDITools from './pages/EDITools'
 import ScriptLibrary from './pages/ScriptLibrary'
+import { type SampleInput } from './data/scriptLibrary'
 
 type ToolTab =
   | 'xml-formatter'
@@ -46,10 +47,10 @@ const TABS: { id: ToolTab; label: string; icon: string }[] = [
 
 export default function App() {
   const [activeTab,    setActiveTab]    = useState<ToolTab>('xml-formatter')
-  const [ideInject,    setIdeInject]    = useState<{ body: string; key: number } | undefined>()
+  const [ideInject,    setIdeInject]    = useState<{ body: string; sample?: SampleInput; key: number } | undefined>()
 
-  const loadInIDE = useCallback((body: string) => {
-    setIdeInject(prev => ({ body, key: (prev?.key ?? 0) + 1 }))
+  const loadInIDE = useCallback((body: string, sample?: SampleInput) => {
+    setIdeInject(prev => ({ body, sample, key: (prev?.key ?? 0) + 1 }))
     setActiveTab('groovy')
   }, [])
 

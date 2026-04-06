@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { type SampleInput } from '../data/scriptLibrary'
 import {
   Button,
   Card,
@@ -87,7 +88,7 @@ function segItem(e: Event) {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 // inject.key increments each time so useEffect fires even for the same script content
-export default function GroovyIDE({ inject }: { inject?: { body: string; key: number } }) {
+export default function GroovyIDE({ inject }: { inject?: { body: string; sample?: SampleInput; key: number } }) {
   const [script,     setScript]     = useState(SAMPLE_SCRIPT)
   const [body,       setBody]       = useState(SAMPLE_BODY)
   const [headersRaw, setHeadersRaw] = useState('Content-Type: application/xml')
@@ -100,6 +101,11 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; key: nu
     if (inject?.body) {
       setScript(inject.body)
       setResult(null)
+      if (inject.sample) {
+        if (inject.sample.body       !== undefined) setBody(inject.sample.body)
+        if (inject.sample.headers    !== undefined) setHeadersRaw(inject.sample.headers)
+        if (inject.sample.properties !== undefined) setPropsRaw(inject.sample.properties)
+      }
     }
   }, [inject?.key]) // eslint-disable-line react-hooks/exhaustive-deps
 

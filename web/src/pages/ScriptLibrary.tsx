@@ -11,7 +11,7 @@ import {
   Toolbar,
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
-import { SCRIPTS, ALL_TAGS, type LibraryScript, type Complexity } from '../data/scriptLibrary'
+import { SCRIPTS, ALL_TAGS, type LibraryScript, type Complexity, type SampleInput } from '../data/scriptLibrary'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ function ScriptCard({
   onLoadInIDE,
 }: {
   script:      LibraryScript
-  onLoadInIDE: (body: string) => void
+  onLoadInIDE: (body: string, sample?: SampleInput) => void
 }) {
   const [copied,   setCopied]   = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -174,7 +174,7 @@ function ScriptCard({
 
       {/* ── Actions ── */}
       <Toolbar style={{ padding: '0.25rem 0.75rem 0.75rem', borderTop: 'none' }}>
-        <Button design="Emphasized" icon="source-code" onClick={() => onLoadInIDE(script.body)}>
+        <Button design="Emphasized" icon="source-code" onClick={() => onLoadInIDE(script.body, script.sampleInput)}>
           Load in IDE
         </Button>
         <Button design="Transparent" icon="copy" onClick={handleCopy}>
@@ -191,7 +191,7 @@ function ScriptCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function ScriptLibrary({ onLoadInIDE }: { onLoadInIDE: (body: string) => void }) {
+export default function ScriptLibrary({ onLoadInIDE }: { onLoadInIDE: (body: string, sample?: SampleInput) => void }) {
   const [search,     setSearch]     = useState('')
   const [complexity, setComplexity] = useState<Complexity | 'All'>('All')
   const [activeTag,  setActiveTag]  = useState('')

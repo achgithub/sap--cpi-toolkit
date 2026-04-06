@@ -47,6 +47,20 @@ class ScriptExecutor {
             def binding = new Binding()
             binding.setVariable('out', printWriter)
 
+            // Mock MPL — writes log calls to the IDE console so you can see what
+            // would be recorded in the Message Processing Log on a real tenant.
+            def mockMPL = [
+                setStringProperty:     { String k, String v ->
+                    printWriter.println("[MPL] Property  ${k} = ${v}")
+                },
+                addAttachmentAsString: { String name, String content, String ct ->
+                    printWriter.println("[MPL] Attachment '${name}' (${ct}, ${content?.length() ?: 0} chars)")
+                },
+            ]
+            binding.setVariable('messageLogFactory', [
+                getMessageLog: { msg -> mockMPL }
+            ])
+
             def config = new CompilerConfiguration()
             // Keep the standard Script base class so println → binding.out works
             config.scriptBaseClass = 'groovy.lang.Script'

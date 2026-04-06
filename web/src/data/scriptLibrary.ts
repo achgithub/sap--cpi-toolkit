@@ -1,5 +1,11 @@
 export type Complexity = 'Beginner' | 'Intermediate' | 'Advanced'
 
+export interface SampleInput {
+  body?:       string
+  headers?:    string   // "Key: Value" one per line — same format as the IDE fields
+  properties?: string
+}
+
 export interface LibraryScript {
   id:          string
   title:       string
@@ -8,6 +14,7 @@ export interface LibraryScript {
   tags:        string[]
   tenantOnly?: boolean   // requires ITApiFactory — won't work in the IDE, only on a deployed tenant
   body:        string
+  sampleInput?: SampleInput
 }
 
 export const ALL_TAGS = [
@@ -15,6 +22,49 @@ export const ALL_TAGS = [
   'Error Handling', 'Routing', 'Encoding', 'Date/Time',
   'OData', 'Attachments', 'IDoc', 'Security', 'Conversion',
 ]
+
+// ── Reusable sample payloads ──────────────────────────────────────────────────
+
+const SAMPLE_PO_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<PurchaseOrder>
+  <Header>
+    <OrderNumber>PO-2026-001</OrderNumber>
+    <OrderDate>20260115</OrderDate>
+    <DocumentType>NB</DocumentType>
+    <Currency>EUR</Currency>
+    <Status>NEW</Status>
+  </Header>
+  <Supplier>
+    <Name>Global Supplies GmbH</Name>
+    <SupplierID>SUP-4711</SupplierID>
+  </Supplier>
+  <Items>
+    <Item lineNumber="1">
+      <MaterialNumber>MAT-001</MaterialNumber>
+      <Description>Industrial Widget Type A</Description>
+      <Quantity unit="EA">50</Quantity>
+      <UnitPrice>12.50</UnitPrice>
+    </Item>
+    <Item lineNumber="2">
+      <MaterialNumber>MAT-002</MaterialNumber>
+      <Description>Steel Bracket 200mm</Description>
+      <Quantity unit="EA">100</Quantity>
+      <UnitPrice>4.75</UnitPrice>
+    </Item>
+  </Items>
+  <Totals>
+    <NetAmount>1100.00</NetAmount>
+    <TaxAmount>209.00</TaxAmount>
+    <GrossAmount>1309.00</GrossAmount>
+  </Totals>
+</PurchaseOrder>`
+
+const STANDARD_HEADERS = `Content-Type: application/xml
+SAP_MessageProcessingLogID: MPL-IDE-2026-001
+SenderSystemID: S4H-CLNT100
+X-CorrelationID: CORR-2026-ABC-001`
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const SCRIPTS: LibraryScript[] = [
 
@@ -41,6 +91,10 @@ def Message processData(Message message) {
 
     return message
 }`,
+    sampleInput: {
+      body:    SAMPLE_PO_XML,
+      headers: STANDARD_HEADERS,
+    },
   },
 
   // ── 2 ─────────────────────────────────────────────────────────────────────
@@ -74,6 +128,11 @@ def Message processData(Message message) {
     mpl.addAttachmentAsString("MessageContext", sb.toString(), "text/plain")
     return message
 }`,
+    sampleInput: {
+      body:       SAMPLE_PO_XML,
+      headers:    STANDARD_HEADERS,
+      properties: `SAP_MplCorrelationId: CORR-TEST-001\nSenderSystem: S4H-CLNT100\nTargetSystem: ECC-300\nDocumentType: NB`,
+    },
   },
 
   // ── 3 ─────────────────────────────────────────────────────────────────────
