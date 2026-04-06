@@ -9,6 +9,7 @@ import {
   MessageStrip,
   TextArea,
   Toolbar,
+  ToolbarSeparator,
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
 
@@ -19,6 +20,11 @@ export interface EditorAction {
   design?: 'Default' | 'Emphasized' | 'Transparent' | 'Positive' | 'Negative' | 'Attention'
 }
 
+export interface EditorSample {
+  label: string   // shown on the button, e.g. "Purchase Order"
+  content: string // loaded into the input when clicked
+}
+
 interface Props {
   title: string
   subtitle?: string
@@ -26,8 +32,10 @@ interface Props {
   outputLabel?: string
   inputValue: string
   outputValue: string
+  inputPlaceholder?: string
   onInputChange: (value: string) => void
   actions: EditorAction[]
+  samples?: EditorSample[]
   errors?: string[]
   warnings?: string[]
   loading?: boolean
@@ -42,8 +50,10 @@ export default function EditorPanel({
   outputLabel = 'Output',
   inputValue,
   outputValue,
+  inputPlaceholder,
   onInputChange,
   actions,
+  samples = [],
   errors = [],
   warnings = [],
   loading = false,
@@ -86,12 +96,30 @@ export default function EditorPanel({
             <Button
               key={a.label}
               design={a.design ?? 'Default'}
-              disabled={a.disabled || loading}
+              disabled={a.disabled || (loading && a.design === 'Emphasized')}
               onClick={a.onClick}
             >
-              {loading && a.label !== 'Clear' ? 'Working…' : a.label}
+              {loading && a.design === 'Emphasized' ? 'Working…' : a.label}
             </Button>
           ))}
+
+          {/* Sample buttons */}
+          {samples.length > 0 && (
+            <>
+              <ToolbarSeparator />
+              {samples.map((s) => (
+                <Button
+                  key={s.label}
+                  design="Transparent"
+                  icon="example"
+                  onClick={() => onInputChange(s.content)}
+                >
+                  {s.label}
+                </Button>
+              ))}
+            </>
+          )}
+
           <ToolbarSpacer />
           {outputFilename && outputValue && (
             <Button design="Transparent" icon="download" onClick={handleDownload}>
@@ -110,6 +138,7 @@ export default function EditorPanel({
             <Label>{inputLabel}</Label>
             <TextArea
               value={inputValue}
+              placeholder={inputPlaceholder}
               rows={22}
               style={{ width: '100%', fontFamily: 'monospace' }}
               onInput={(e) => onInputChange((e.target as unknown as HTMLTextAreaElement).value)}
