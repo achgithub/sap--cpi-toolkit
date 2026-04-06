@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Button,
   Card,
@@ -86,7 +86,8 @@ function segItem(e: Event) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function GroovyIDE() {
+// inject.key increments each time so useEffect fires even for the same script content
+export default function GroovyIDE({ inject }: { inject?: { body: string; key: number } }) {
   const [script,     setScript]     = useState(SAMPLE_SCRIPT)
   const [body,       setBody]       = useState(SAMPLE_BODY)
   const [headersRaw, setHeadersRaw] = useState('Content-Type: application/xml')
@@ -94,6 +95,13 @@ export default function GroovyIDE() {
   const [timeoutMs,  setTimeoutMs]  = useState(10000)
   const [running,    setRunning]    = useState(false)
   const [result,     setResult]     = useState<ExecuteResult | null>(null)
+
+  useEffect(() => {
+    if (inject?.body) {
+      setScript(inject.body)
+      setResult(null)
+    }
+  }, [inject?.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const run = async () => {
     setRunning(true); setResult(null)

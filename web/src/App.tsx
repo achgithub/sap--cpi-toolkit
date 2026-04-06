@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import {
   ShellBar,
   ShellBarItem,
@@ -17,6 +17,7 @@ import CertGen from './pages/CertGen'
 import TestDataGen from './pages/TestDataGen'
 import GroovyIDE from './pages/GroovyIDE'
 import EDITools from './pages/EDITools'
+import ScriptLibrary from './pages/ScriptLibrary'
 
 type ToolTab =
   | 'xml-formatter'
@@ -28,6 +29,7 @@ type ToolTab =
   | 'testdata'
   | 'groovy'
   | 'edi'
+  | 'library'
 
 const TABS: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'xml-formatter',  label: 'XML Formatter',  icon: 'syntax'        },
@@ -39,10 +41,17 @@ const TABS: { id: ToolTab; label: string; icon: string }[] = [
   { id: 'testdata',       label: 'Test Data',      icon: 'simulate'      },
   { id: 'groovy',         label: 'Groovy IDE',     icon: 'terminal'      },
   { id: 'edi',            label: 'EDI Tools',      icon: 'curriculum'    },
+  { id: 'library',       label: 'Script Library', icon: 'library'       },
 ]
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<ToolTab>('xml-formatter')
+  const [activeTab,    setActiveTab]    = useState<ToolTab>('xml-formatter')
+  const [ideInject,    setIdeInject]    = useState<{ body: string; key: number } | undefined>()
+
+  const loadInIDE = useCallback((body: string) => {
+    setIdeInject(prev => ({ body, key: (prev?.key ?? 0) + 1 }))
+    setActiveTab('groovy')
+  }, [])
 
   return (
     <FlexBox direction={FlexBoxDirection.Column} style={{ height: '100vh', overflow: 'hidden' }}>
@@ -80,8 +89,9 @@ export default function App() {
         {activeTab === 'keygen'         && <KeyGen />}
         {activeTab === 'certgen'        && <CertGen />}
         {activeTab === 'testdata'       && <TestDataGen />}
-        {activeTab === 'groovy'         && <GroovyIDE />}
+        {activeTab === 'groovy'         && <GroovyIDE inject={ideInject} />}
         {activeTab === 'edi'            && <EDITools />}
+        {activeTab === 'library'        && <ScriptLibrary onLoadInIDE={loadInIDE} />}
       </div>
     </FlexBox>
   )
