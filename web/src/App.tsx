@@ -4,6 +4,7 @@ import {
   ShellBarItem,
   TabContainer,
   Tab,
+  TabSeparator,
   FlexBox,
   FlexBoxDirection,
 } from '@ui5/webcomponents-react'
@@ -38,35 +39,22 @@ type ToolTab =
   | 'sftp'
   | 'assets'
 
-const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
-  {
-    label: 'Format & Convert',
-    tabs: [
-      { id: 'xml-formatter',  label: 'XML Formatter'  },
-      { id: 'json-formatter', label: 'JSON Formatter' },
-      { id: 'converter',      label: 'XML ↔ JSON'     },
-      { id: 'xsd-generator',  label: 'XSD Generator'  },
-      { id: 'edi',            label: 'EDI Tools'      },
-    ],
-  },
-  {
-    label: 'Groovy',
-    tabs: [
-      { id: 'groovy',   label: 'Groovy IDE'     },
-      { id: 'library',  label: 'Script Library' },
-    ],
-  },
-  {
-    label: 'Testing',
-    tabs: [
-      { id: 'testdata',          label: 'Test Data'      },
-      { id: 'keygen',            label: 'Key Generation' },
-      { id: 'certgen',           label: 'Certificates'   },
-      { id: 'adapter-scenarios', label: 'Mock Adapters'  },
-      { id: 'sftp',              label: 'SFTP Server'    },
-      { id: 'assets',            label: 'Asset Store'    },
-    ],
-  },
+// Flat tab list — TabSeparator provides visual group breaks.
+// Tabs overflow automatically into a "More" dropdown when the window is narrow.
+const TABS: { id: ToolTab; label: string; separator?: boolean }[] = [
+  { id: 'xml-formatter',  label: 'XML Formatter'  },
+  { id: 'json-formatter', label: 'JSON Formatter' },
+  { id: 'converter',      label: 'XML ↔ JSON'     },
+  { id: 'xsd-generator',  label: 'XSD Generator'  },
+  { id: 'edi',            label: 'EDI Tools',       separator: true },
+  { id: 'groovy',         label: 'Groovy IDE'     },
+  { id: 'library',        label: 'Script Library',  separator: true },
+  { id: 'testdata',          label: 'Test Data'      },
+  { id: 'keygen',            label: 'Key Generation' },
+  { id: 'certgen',           label: 'Certificates'   },
+  { id: 'adapter-scenarios', label: 'Mock Adapters'  },
+  { id: 'sftp',              label: 'SFTP Server'    },
+  { id: 'assets',            label: 'Asset Store'    },
 ]
 
 export default function App() {
@@ -95,24 +83,16 @@ export default function App() {
         }}
         style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}
       >
-        {GROUPS.map((group) => (
-          <Tab
-            key={group.label}
-            text={group.label}
-            selected={group.tabs.some(t => t.id === activeTab)}
-            items={
-              <>
-                {group.tabs.map((tab) => (
-                  <Tab
-                    key={tab.id}
-                    data-id={tab.id}
-                    text={tab.label}
-                    selected={activeTab === tab.id}
-                  />
-                ))}
-              </>
-            }
-          />
+        {TABS.map((tab) => (
+          <>
+            <Tab
+              key={tab.id}
+              data-id={tab.id}
+              text={tab.label}
+              selected={activeTab === tab.id}
+            />
+            {tab.separator && <TabSeparator key={tab.id + '-sep'} />}
+          </>
         ))}
       </TabContainer>
 
