@@ -29,6 +29,7 @@ interface AdapterConfig {
   target_url?: string
   method?: string
   request_body?: string
+  request_headers?: Record<string, string>
 }
 
 interface Adapter {
