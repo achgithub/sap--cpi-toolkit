@@ -864,8 +864,6 @@ const TYPE_BADGE: Record<string, { bg: string; label: string }> = {
   properties: { bg: '#9333ea', label: 'Properties' },
 }
 
-}
-
 function WizardTypeBadge({ type }: { type: string }) {
   const m = TYPE_BADGE[type] ?? TYPE_BADGE.text
   return (
