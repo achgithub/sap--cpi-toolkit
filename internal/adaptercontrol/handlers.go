@@ -26,6 +26,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/sftp", h.handleSFTP)
 	mux.HandleFunc("/sftp/regenerate-key", h.handleSFTPRegenerateKey)
 	mux.HandleFunc("/system/log", h.handleSystemLog)
+	mux.HandleFunc("/assets", h.handleAssets)
+	mux.HandleFunc("/assets/", h.handleAssetDetail)
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────
@@ -292,6 +294,54 @@ func (h *Handler) handleSFTPRegenerateKey(w http.ResponseWriter, r *http.Request
 	}
 	h.store.AddLog("SFTP host key regenerated")
 	writeJSON(w, map[string]string{"fingerprint": fp})
+}
+
+// ── Assets ────────────────────────────────────────────────────────────────────
+
+func (h *Handler) handleAssets(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, h.store.ListAssets())
+	case http.MethodPost:
+		var req CreateAssetRequest
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		a, err := h.store.CreateAsset(req)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeCreated(w, a)
+	default:
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) handleAssetDetail(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/assets/")
+	id = strings.Trim(id, "/")
+	if id == "" {
+		jsonError(w, "asset ID required", http.StatusBadRequest)
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		a, err := h.store.GetAsset(id)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, a)
+	case http.MethodDelete:
+		if err := h.store.DeleteAsset(id); err != nil {
+			jsonError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }
 
 // ── System log ────────────────────────────────────────────────────────────────

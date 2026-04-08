@@ -145,6 +145,7 @@ export default function Converter() {
         : [{ label: 'Despatch Advice JSON', content: SAMPLE_DESADV_JSON }]
       }
       outputFilename={output ? `converted.${isXMLtoJSON ? 'json' : 'xml'}` : undefined}
+      outputContentType={output ? (isXMLtoJSON ? 'json' : 'xml') : undefined}
     >
       <SegmentedButton
         onSelectionChange={(e) => {

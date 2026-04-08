@@ -128,6 +128,23 @@ type SFTPFile struct {
 	Content string `json:"content"`
 }
 
+// ── Asset store ───────────────────────────────────────────────────────────────
+
+// Asset is a named payload saved from a tool output for reuse in the mock wizard.
+type Asset struct {
+	ID          string    `json:"id"`
+	Name        string    `json:"name"`
+	Content     string    `json:"content"`
+	ContentType string    `json:"content_type"` // "xml" | "json" | "edi" | "csv" | "text"
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+type CreateAssetRequest struct {
+	Name        string `json:"name"`
+	Content     string `json:"content"`
+	ContentType string `json:"content_type"`
+}
+
 // ── Request / response types ──────────────────────────────────────────────────
 
 type CreateScenarioRequest struct {

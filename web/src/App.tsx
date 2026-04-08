@@ -20,6 +20,7 @@ import EDITools from './pages/EDITools'
 import ScriptLibrary from './pages/ScriptLibrary'
 import AdapterScenarios from './pages/AdapterScenarios'
 import SFTPServer from './pages/SFTPServer'
+import AssetStore from './pages/AssetStore'
 import { type SampleInput } from './data/scriptLibrary'
 
 type ToolTab =
@@ -35,6 +36,7 @@ type ToolTab =
   | 'library'
   | 'adapter-scenarios'
   | 'sftp'
+  | 'assets'
 
 const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
   {
@@ -62,6 +64,7 @@ const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
       { id: 'certgen',           label: 'Certificates'   },
       { id: 'adapter-scenarios', label: 'Mock Adapters'  },
       { id: 'sftp',              label: 'SFTP Server'    },
+      { id: 'assets',            label: 'Asset Store'    },
     ],
   },
 ]
@@ -126,6 +129,7 @@ export default function App() {
         {activeTab === 'library'            && <ScriptLibrary onLoadInIDE={loadInIDE} />}
         {activeTab === 'adapter-scenarios'  && <AdapterScenarios />}
         {activeTab === 'sftp'               && <SFTPServer />}
+        {activeTab === 'assets'             && <AssetStore />}
       </div>
     </FlexBox>
   )

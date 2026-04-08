@@ -43,6 +43,7 @@ export default function XMLFormatter() {
         { label: 'Purchase Order', content: SAMPLE_PO },
       ]}
       outputFilename={output ? 'formatted.xml' : undefined}
+      outputContentType={output ? 'xml' : undefined}
     />
   )
 }

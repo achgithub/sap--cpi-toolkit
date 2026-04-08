@@ -12,6 +12,7 @@ import {
   ToolbarSeparator,
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
+import { SaveToAssetsButton } from '../pages/AssetStore'
 
 export interface EditorAction {
   label: string
@@ -40,6 +41,7 @@ interface Props {
   warnings?: string[]
   loading?: boolean
   outputFilename?: string
+  outputContentType?: string  // "xml" | "json" | "edi" | "csv" | "text" — enables Save to Assets
   children?: React.ReactNode // optional controls above the editors (e.g. direction toggle)
 }
 
@@ -58,6 +60,7 @@ export default function EditorPanel({
   warnings = [],
   loading = false,
   outputFilename,
+  outputContentType,
   children,
 }: Props) {
   const handleDownload = () => {
@@ -121,6 +124,13 @@ export default function EditorPanel({
           )}
 
           <ToolbarSpacer />
+          {outputContentType && outputValue && (
+            <SaveToAssetsButton
+              content={outputValue}
+              contentType={outputContentType}
+              suggestedName={outputFilename?.replace(/\.[^.]+$/, '') ?? ''}
+            />
+          )}
           {outputFilename && outputValue && (
             <Button design="Transparent" icon="download" onClick={handleDownload}>
               {outputFilename}

@@ -22,6 +22,7 @@ type Store struct {
 	mu         sync.RWMutex
 	scenarios  map[string]*Scenario
 	adapters   map[string]*Adapter // flat index: adapterID → Adapter (for fast config polling)
+	assets     map[string]*Asset
 	sftp       SFTPConfig
 	systemLog  []string
 }
@@ -30,6 +31,7 @@ func NewStore() *Store {
 	s := &Store{
 		scenarios: make(map[string]*Scenario),
 		adapters:  make(map[string]*Adapter),
+		assets:    make(map[string]*Asset),
 		systemLog: []string{},
 		sftp: SFTPConfig{
 			Credentials: Credentials{Username: "sftpuser", Password: "sftppass"},
@@ -311,6 +313,65 @@ func (s *Store) RegenerateHostKey() (string, error) {
 	s.sftp.SSHHostKey = keyPEM
 	s.sftp.SSHHostKeyFingerprint = fp
 	return fp, nil
+}
+
+// ── Assets ────────────────────────────────────────────────────────────────────
+
+func (s *Store) ListAssets() []Asset {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]Asset, 0, len(s.assets))
+	for _, a := range s.assets {
+		out = append(out, *a)
+	}
+	return out
+}
+
+func (s *Store) CreateAsset(req CreateAssetRequest) (*Asset, error) {
+	if req.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if req.Content == "" {
+		return nil, fmt.Errorf("content is required")
+	}
+	ct := req.ContentType
+	if ct == "" {
+		ct = "text"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id := slugify(req.Name) + "-" + fmt.Sprintf("%d", time.Now().UnixMilli())
+	a := &Asset{
+		ID:          id,
+		Name:        req.Name,
+		Content:     req.Content,
+		ContentType: ct,
+		CreatedAt:   time.Now(),
+	}
+	s.assets[id] = a
+	cp := *a
+	return &cp, nil
+}
+
+func (s *Store) GetAsset(id string) (*Asset, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	a, ok := s.assets[id]
+	if !ok {
+		return nil, fmt.Errorf("asset not found: %s", id)
+	}
+	cp := *a
+	return &cp, nil
+}
+
+func (s *Store) DeleteAsset(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.assets[id]; !ok {
+		return fmt.Errorf("asset not found: %s", id)
+	}
+	delete(s.assets, id)
+	return nil
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

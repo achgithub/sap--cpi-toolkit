@@ -43,6 +43,7 @@ export default function JSONFormatter() {
         { label: 'Invoice', content: SAMPLE_INVOICE },
       ]}
       outputFilename={output ? 'formatted.json' : undefined}
+      outputContentType={output ? 'json' : undefined}
     />
   )
 }
