@@ -95,8 +95,9 @@ async function apiFetch(path: string, opts?: RequestInit) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdapterScenarios() {
-  const [scenarios,  setScenarios]  = useState<Scenario[]>([])
-  const [error,      setError]      = useState('')
+  const [scenarios,   setScenarios]   = useState<Scenario[]>([])
+  const [error,       setError]       = useState('')
+  const [showWizard,  setShowWizard]  = useState(false)
 
   // New scenario form
   const [showCreate, setShowCreate] = useState(false)
@@ -137,6 +138,13 @@ export default function AdapterScenarios() {
     } catch (e: any) { setError(e.message) }
   }
 
+  if (showWizard) {
+    return <MockWizard
+      onDone={() => { setShowWizard(false); load() }}
+      setError={setError}
+    />
+  }
+
   return (
     <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '1rem' }}>
       {error && <MessageStrip design="Negative" onClose={() => setError('')}>{error}</MessageStrip>}
@@ -145,6 +153,7 @@ export default function AdapterScenarios() {
         <Label style={{ fontSize: '1.25rem', fontWeight: 600 }}>Adapter Scenarios</Label>
         <ToolbarSpacer />
         <Button design="Transparent" icon="refresh" onClick={load} />
+        <Button design="Default" icon="overlay" onClick={() => setShowWizard(true)}>New Mock</Button>
         <Button design="Emphasized" icon="add" onClick={() => setShowCreate(v => !v)}>New Scenario</Button>
       </Toolbar>
 
@@ -605,6 +614,402 @@ function AdapterConfigForm({ type, config, onChange }: {
             </FlexBox>
           )}
         </>
+      )}
+    </FlexBox>
+  )
+}
+
+// ── Mock Wizard ───────────────────────────────────────────────────────────────
+
+interface WizardAsset {
+  id: string
+  name: string
+  content: string
+  content_type: string
+}
+
+const PAYLOAD_TYPES = ['xml', 'json', 'edi', 'csv', 'text']
+const TYPE_BADGE: Record<string, { bg: string; label: string }> = {
+  xml:        { bg: '#0070f3', label: 'XML'   },
+  json:       { bg: '#f59e0b', label: 'JSON'  },
+  edi:        { bg: '#8b5cf6', label: 'EDI'   },
+  csv:        { bg: '#10b981', label: 'CSV'   },
+  text:       { bg: '#6b7280', label: 'Text'  },
+  headers:    { bg: '#0f766e', label: 'Headers'    },
+  properties: { bg: '#9333ea', label: 'Properties' },
+}
+
+function parseKVHeaders(raw: string): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const line of raw.split('\n')) {
+    const i = line.indexOf(':')
+    if (i > 0) result[line.slice(0, i).trim()] = line.slice(i + 1).trim()
+  }
+  return result
+}
+
+function WizardTypeBadge({ type }: { type: string }) {
+  const m = TYPE_BADGE[type] ?? TYPE_BADGE.text
+  return (
+    <span style={{
+      background: m.bg, color: '#fff', borderRadius: '0.75rem',
+      padding: '0.1rem 0.55rem', fontSize: '0.7rem', fontWeight: 600,
+    }}>{m.label}</span>
+  )
+}
+
+type WizardStep = 'payload' | 'configure' | 'result'
+
+function MockWizard({ onDone, setError }: {
+  onDone: () => void
+  setError: (e: string) => void
+}) {
+  const [step, setStep] = useState<WizardStep>('payload')
+
+  // Assets
+  const [payloadAssets,  setPayloadAssets]  = useState<WizardAsset[]>([])
+  const [headerAssets,   setHeaderAssets]   = useState<WizardAsset[]>([])
+  const [selectedPayload, setSelectedPayload] = useState<WizardAsset | null>(null)
+  const [manualBody,     setManualBody]     = useState('')
+
+  // Configure step
+  const [adapterType,   setAdapterType]   = useState('REST')
+  const [adapterName,   setAdapterName]   = useState('')
+  const [behaviorMode,  setBehaviorMode]  = useState('success')
+  const [statusCode,    setStatusCode]    = useState(200)
+  const [responseBody,  setResponseBody]  = useState('')
+  const [headersAssetId, setHeadersAssetId] = useState('')
+  const [delayMs,       setDelayMs]       = useState(0)
+
+  // Scenario step (part of configure)
+  const [scenarios,     setScenarios]     = useState<Scenario[]>([])
+  const [scenarioId,    setScenarioId]    = useState('')
+  const [newScenName,   setNewScenName]   = useState('')
+
+  // Result
+  const [createdAdapter, setCreatedAdapter] = useState<Adapter | null>(null)
+  const [creating,       setCreating]       = useState(false)
+  const [copied,         setCopied]         = useState(false)
+
+  useEffect(() => {
+    apiFetch('/assets').then((data: WizardAsset[]) => {
+      setPayloadAssets((data ?? []).filter(a => PAYLOAD_TYPES.includes(a.content_type)))
+      setHeaderAssets((data ?? []).filter(a => a.content_type === 'headers'))
+    }).catch(() => {})
+    apiFetch('/scenarios').then((data: Scenario[]) => {
+      setScenarios(data ?? [])
+      if (data?.length > 0) setScenarioId(data[0].id)
+    }).catch(() => {})
+  }, [])
+
+  const selectPayload = (a: WizardAsset) => {
+    setSelectedPayload(a)
+    setManualBody('')
+    setResponseBody(a.content)
+    if (!adapterName) setAdapterName(a.name)
+  }
+
+  const useManual = () => {
+    setSelectedPayload(null)
+    setResponseBody(manualBody)
+  }
+
+  const goToConfigure = () => {
+    if (!selectedPayload && !manualBody.trim()) return
+    if (!selectedPayload) setResponseBody(manualBody)
+    setStep('configure')
+  }
+
+  const createMock = async () => {
+    if (!adapterName.trim()) return
+    setCreating(true)
+    try {
+      let targetScenarioId = scenarioId
+
+      // Create new scenario if needed
+      if (!targetScenarioId && newScenName.trim()) {
+        const sc: Scenario = await apiFetch('/scenarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newScenName.trim() }),
+        })
+        targetScenarioId = sc.id
+      }
+
+      if (!targetScenarioId) {
+        setError('Select or create a scenario first')
+        setCreating(false)
+        return
+      }
+
+      // Build response headers from selected headers asset
+      const responseHeaders: Record<string, string> = {}
+      if (headersAssetId) {
+        const ha = headerAssets.find(a => a.id === headersAssetId)
+        if (ha) Object.assign(responseHeaders, parseKVHeaders(ha.content))
+      }
+
+      const body = {
+        name: adapterName.trim(),
+        type: adapterType,
+        behavior_mode: behaviorMode,
+        config: {
+          status_code: statusCode,
+          response_body: responseBody,
+          response_headers: responseHeaders,
+          response_delay_ms: delayMs,
+        },
+      }
+
+      const adapter: Adapter = await apiFetch('/scenarios/' + targetScenarioId + '/adapters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      setCreatedAdapter(adapter)
+      setStep('result')
+    } catch (e: any) { setError(e.message) }
+    finally { setCreating(false) }
+  }
+
+  const copyURL = () => {
+    if (!createdAdapter?.ingress_url) return
+    navigator.clipboard.writeText(createdAdapter.ingress_url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {})
+  }
+
+  const reset = () => {
+    setStep('payload')
+    setSelectedPayload(null); setManualBody(''); setResponseBody('')
+    setAdapterName(''); setAdapterType('REST'); setBehaviorMode('success')
+    setStatusCode(200); setDelayMs(0); setHeadersAssetId('')
+    setCreatedAdapter(null); setCopied(false)
+  }
+
+  // ── Step indicators ──
+
+  const stepNum = step === 'payload' ? 1 : step === 'configure' ? 2 : 3
+  const StepDot = ({ n, label }: { n: number; label: string }) => (
+    <FlexBox style={{ alignItems: 'center', gap: '0.4rem' }}>
+      <span style={{
+        width: '1.5rem', height: '1.5rem', borderRadius: '50%', display: 'flex',
+        alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700,
+        background: n <= stepNum ? 'var(--sapButton_Emphasized_Background)' : 'var(--sapField_BorderColor)',
+        color: n <= stepNum ? 'var(--sapButton_Emphasized_TextColor)' : 'var(--sapTextColor)',
+      }}>{n}</span>
+      <span style={{ fontSize: '0.85rem', fontWeight: n === stepNum ? 600 : 400,
+        color: n === stepNum ? 'var(--sapTextColor)' : 'var(--sapContent_LabelColor)' }}>{label}</span>
+    </FlexBox>
+  )
+
+  return (
+    <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '1rem' }}>
+      <Toolbar>
+        <Button design="Transparent" icon="nav-back" onClick={onDone} />
+        <Label style={{ fontSize: '1.25rem', fontWeight: 600, marginLeft: '0.5rem' }}>New Mock Wizard</Label>
+        <ToolbarSpacer />
+        {/* Step progress */}
+        <FlexBox style={{ gap: '1rem', alignItems: 'center' }}>
+          <StepDot n={1} label="Payload" />
+          <span style={{ color: 'var(--sapField_BorderColor)' }}>›</span>
+          <StepDot n={2} label="Configure" />
+          <span style={{ color: 'var(--sapField_BorderColor)' }}>›</span>
+          <StepDot n={3} label="Done" />
+        </FlexBox>
+      </Toolbar>
+
+      {/* ── Step 1: Payload ── */}
+      {step === 'payload' && (
+        <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '1rem' }}>
+          <Card header={<CardHeader titleText="Choose a Payload" subtitleText="Select a saved asset to use as the mock response body" />}>
+            <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
+              {payloadAssets.length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.75rem' }}>
+                  {payloadAssets.map(a => (
+                    <div key={a.id} onClick={() => selectPayload(a)} style={{
+                      border: `2px solid ${selectedPayload?.id === a.id ? 'var(--sapButton_Emphasized_Background)' : 'var(--sapField_BorderColor)'}`,
+                      borderRadius: '6px', padding: '0.75rem', cursor: 'pointer',
+                      background: selectedPayload?.id === a.id ? 'var(--sapList_SelectionBackgroundColor)' : 'var(--sapField_Background)',
+                    }}>
+                      <FlexBox style={{ gap: '0.5rem', alignItems: 'center', marginBottom: '0.4rem' }}>
+                        <WizardTypeBadge type={a.content_type} />
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.name}</span>
+                      </FlexBox>
+                      <div style={{
+                        fontFamily: 'monospace', fontSize: '0.72rem',
+                        color: 'var(--sapContent_LabelColor)',
+                        maxHeight: '3.5rem', overflow: 'hidden',
+                        whiteSpace: 'pre', textOverflow: 'ellipsis',
+                      }}>
+                        {a.content.slice(0, 150)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <MessageStrip design="Information" hideCloseButton>
+                  No payload assets saved yet. Use "Save to Assets" on any tool output, or enter content manually below.
+                </MessageStrip>
+              )}
+            </FlexBox>
+          </Card>
+
+          <Card header={<CardHeader titleText="Or enter manually" />}>
+            <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
+              <TextArea
+                value={manualBody}
+                rows={8}
+                placeholder="Paste XML, JSON, or any response body here…"
+                style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
+                onInput={(e: any) => { setManualBody(e.target.value); setSelectedPayload(null) }}
+              />
+            </FlexBox>
+          </Card>
+
+          <FlexBox style={{ gap: '0.5rem' }}>
+            <Button onClick={onDone}>Cancel</Button>
+            <Button design="Emphasized"
+              disabled={!selectedPayload && !manualBody.trim()}
+              onClick={goToConfigure}>
+              Next: Configure →
+            </Button>
+          </FlexBox>
+        </FlexBox>
+      )}
+
+      {/* ── Step 2: Configure ── */}
+      {step === 'configure' && (
+        <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '1rem' }}>
+
+          <Card header={<CardHeader titleText="Mock Configuration" />}>
+            <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
+
+              <FlexBox style={{ gap: '1rem', flexWrap: 'wrap' }}>
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 2, minWidth: '12rem' }}>
+                  <Label required>Adapter Name</Label>
+                  <Input value={adapterName} onInput={(e: any) => setAdapterName(e.target.value)}
+                    placeholder="e.g. Invoice Receiver" style={{ width: '100%' }} />
+                </FlexBox>
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1, minWidth: '8rem' }}>
+                  <Label>Type</Label>
+                  <Select style={{ width: '100%' }} onChange={(e: any) => setAdapterType(e.detail.selectedOption.value)}>
+                    {ADAPTER_TYPES.filter(t => !t.endsWith('-SENDER')).map(t =>
+                      <Option key={t} value={t} selected={t === adapterType}>{t}</Option>)}
+                  </Select>
+                </FlexBox>
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1, minWidth: '8rem' }}>
+                  <Label>Behaviour</Label>
+                  <Select style={{ width: '100%' }} onChange={(e: any) => setBehaviorMode(e.detail.selectedOption.value)}>
+                    <Option value="success" selected={behaviorMode === 'success'}>Success</Option>
+                    <Option value="failure" selected={behaviorMode === 'failure'}>Failure</Option>
+                  </Select>
+                </FlexBox>
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', minWidth: '7rem' }}>
+                  <Label>Status Code</Label>
+                  <Input type="Number" value={String(statusCode)}
+                    onInput={(e: any) => setStatusCode(Number(e.target.value))} style={{ width: '100%' }} />
+                </FlexBox>
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', minWidth: '7rem' }}>
+                  <Label>Delay (ms)</Label>
+                  <Input type="Number" value={String(delayMs)}
+                    onInput={(e: any) => setDelayMs(Number(e.target.value))} style={{ width: '100%' }} />
+                </FlexBox>
+              </FlexBox>
+
+              {headerAssets.length > 0 && (
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+                  <Label>Response Headers (from asset)</Label>
+                  <Select style={{ width: '100%' }} onChange={(e: any) => setHeadersAssetId(e.detail.selectedOption.value)}>
+                    <Option value="">— None —</Option>
+                    {headerAssets.map(a => <Option key={a.id} value={a.id} selected={a.id === headersAssetId}>{a.name}</Option>)}
+                  </Select>
+                </FlexBox>
+              )}
+
+              <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+                <Label>Response Body</Label>
+                <TextArea value={responseBody} rows={10}
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
+                  onInput={(e: any) => setResponseBody(e.target.value)} />
+              </FlexBox>
+            </FlexBox>
+          </Card>
+
+          <Card header={<CardHeader titleText="Scenario" subtitleText="Adapters belong to a scenario" />}>
+            <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
+              {scenarios.length > 0 ? (
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+                  <Label>Add to existing scenario</Label>
+                  <Select style={{ width: '100%' }} onChange={(e: any) => { setScenarioId(e.detail.selectedOption.value); setNewScenName('') }}>
+                    {scenarios.map(s => <Option key={s.id} value={s.id} selected={s.id === scenarioId}>{s.name}</Option>)}
+                    <Option value="">— Create new —</Option>
+                  </Select>
+                </FlexBox>
+              ) : null}
+              {(!scenarioId || scenarios.length === 0) && (
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+                  <Label required>New scenario name</Label>
+                  <Input value={newScenName} onInput={(e: any) => setNewScenName(e.target.value)}
+                    placeholder="e.g. Invoice Flow" style={{ width: '100%' }} />
+                </FlexBox>
+              )}
+            </FlexBox>
+          </Card>
+
+          <FlexBox style={{ gap: '0.5rem' }}>
+            <Button onClick={() => setStep('payload')}>← Back</Button>
+            <Button onClick={onDone}>Cancel</Button>
+            <Button design="Emphasized"
+              disabled={creating || !adapterName.trim() || (!scenarioId && !newScenName.trim())}
+              onClick={createMock}>
+              {creating ? 'Creating…' : 'Create Mock'}
+            </Button>
+          </FlexBox>
+        </FlexBox>
+      )}
+
+      {/* ── Step 3: Result ── */}
+      {step === 'result' && createdAdapter && (
+        <Card header={<CardHeader titleText="Mock Created" subtitleText={createdAdapter.name + ' — ' + createdAdapter.type} />}>
+          <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1.5rem', gap: '1rem', alignItems: 'flex-start' }}>
+            <MessageStrip design="Positive" hideCloseButton>
+              Your mock adapter is live. Point your CPI iFlow sender channel at this URL.
+            </MessageStrip>
+
+            <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', width: '100%' }}>
+              <Label style={{ fontWeight: 600 }}>Endpoint URL</Label>
+              <FlexBox style={{ gap: '0.5rem', alignItems: 'center' }}>
+                <code style={{
+                  flex: 1, background: 'var(--sapField_Background)',
+                  border: '1px solid var(--sapField_BorderColor)',
+                  borderRadius: '4px', padding: '0.4rem 0.75rem',
+                  fontSize: '0.9rem', wordBreak: 'break-all',
+                }}>
+                  {createdAdapter.ingress_url}
+                </code>
+                <Button design={copied ? 'Positive' : 'Default'} icon="copy" onClick={copyURL}>
+                  {copied ? 'Copied!' : 'Copy'}
+                </Button>
+              </FlexBox>
+            </FlexBox>
+
+            <FlexBox style={{ gap: '1rem', fontSize: '0.875rem' }}>
+              <span>Type: <b>{createdAdapter.type}</b></span>
+              <span>Status: <b>{createdAdapter.config.status_code}</b></span>
+              <span>Behaviour: <b>{createdAdapter.behavior_mode}</b></span>
+              {createdAdapter.config.response_delay_ms > 0 && (
+                <span>Delay: <b>{createdAdapter.config.response_delay_ms}ms</b></span>
+              )}
+            </FlexBox>
+
+            <FlexBox style={{ gap: '0.5rem' }}>
+              <Button onClick={reset}>Create another</Button>
+              <Button design="Emphasized" onClick={onDone}>Done</Button>
+            </FlexBox>
+          </FlexBox>
+        </Card>
       )}
     </FlexBox>
   )
