@@ -5,8 +5,6 @@ import {
   CardHeader,
   FlexBox,
   FlexBoxDirection,
-  FlexBoxJustifyContent,
-  FlexBoxAlignItems,
   Input,
   Label,
   MessageStrip,
