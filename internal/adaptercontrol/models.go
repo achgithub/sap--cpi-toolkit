@@ -128,6 +128,33 @@ type SFTPFile struct {
 	Content string `json:"content"`
 }
 
+// ── CPI Connections ───────────────────────────────────────────────────────────
+
+// CPIConnection stores a named SAP CPI tenant URL with optional basic auth.
+// Multiple connections allow switching between dev, test, and sandbox systems.
+type CPIConnection struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`     // e.g. "CPI Dev"
+	URL       string    `json:"url"`      // e.g. "https://my-tenant.hana.ondemand.com"
+	Username  string    `json:"username,omitempty"`
+	Password  string    `json:"password,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type CreateCPIConnectionRequest struct {
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+type UpdateCPIConnectionRequest struct {
+	Name     string `json:"name"`
+	URL      string `json:"url"`
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
 // ── Asset store ───────────────────────────────────────────────────────────────
 
 // Asset is a named payload saved from a tool output for reuse in the mock wizard.

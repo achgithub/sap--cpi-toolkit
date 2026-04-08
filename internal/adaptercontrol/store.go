@@ -19,20 +19,22 @@ const systemLogMaxEntries = 1000
 
 // Store holds all in-memory state for the adapter-control service.
 type Store struct {
-	mu         sync.RWMutex
-	scenarios  map[string]*Scenario
-	adapters   map[string]*Adapter // flat index: adapterID → Adapter (for fast config polling)
-	assets     map[string]*Asset
-	sftp       SFTPConfig
-	systemLog  []string
+	mu          sync.RWMutex
+	scenarios   map[string]*Scenario
+	adapters    map[string]*Adapter // flat index: adapterID → Adapter (for fast config polling)
+	assets      map[string]*Asset
+	connections map[string]*CPIConnection
+	sftp        SFTPConfig
+	systemLog   []string
 }
 
 func NewStore() *Store {
 	s := &Store{
-		scenarios: make(map[string]*Scenario),
-		adapters:  make(map[string]*Adapter),
-		assets:    make(map[string]*Asset),
-		systemLog: []string{},
+		scenarios:   make(map[string]*Scenario),
+		adapters:    make(map[string]*Adapter),
+		assets:      make(map[string]*Asset),
+		connections: make(map[string]*CPIConnection),
+		systemLog:   []string{},
 		sftp: SFTPConfig{
 			Credentials: Credentials{Username: "sftpuser", Password: "sftppass"},
 			Files:       []SFTPFile{},
@@ -371,6 +373,70 @@ func (s *Store) DeleteAsset(id string) error {
 		return fmt.Errorf("asset not found: %s", id)
 	}
 	delete(s.assets, id)
+	return nil
+}
+
+// ── CPI Connections ───────────────────────────────────────────────────────────
+
+func (s *Store) ListConnections() []CPIConnection {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]CPIConnection, 0, len(s.connections))
+	for _, c := range s.connections {
+		out = append(out, *c)
+	}
+	return out
+}
+
+func (s *Store) CreateConnection(req CreateCPIConnectionRequest) (*CPIConnection, error) {
+	if req.Name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+	if req.URL == "" {
+		return nil, fmt.Errorf("url is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id := slugify(req.Name) + "-" + fmt.Sprintf("%d", time.Now().UnixMilli())
+	c := &CPIConnection{
+		ID:        id,
+		Name:      req.Name,
+		URL:       req.URL,
+		Username:  req.Username,
+		Password:  req.Password,
+		CreatedAt: time.Now(),
+	}
+	s.connections[id] = c
+	cp := *c
+	return &cp, nil
+}
+
+func (s *Store) UpdateConnection(id string, req UpdateCPIConnectionRequest) (*CPIConnection, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.connections[id]
+	if !ok {
+		return nil, fmt.Errorf("connection not found: %s", id)
+	}
+	if req.Name != "" {
+		c.Name = req.Name
+	}
+	if req.URL != "" {
+		c.URL = req.URL
+	}
+	c.Username = req.Username
+	c.Password = req.Password
+	cp := *c
+	return &cp, nil
+}
+
+func (s *Store) DeleteConnection(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.connections[id]; !ok {
+		return fmt.Errorf("connection not found: %s", id)
+	}
+	delete(s.connections, id)
 	return nil
 }
 

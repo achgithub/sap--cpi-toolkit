@@ -28,6 +28,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/system/log", h.handleSystemLog)
 	mux.HandleFunc("/assets", h.handleAssets)
 	mux.HandleFunc("/assets/", h.handleAssetDetail)
+	mux.HandleFunc("/connections", h.handleConnections)
+	mux.HandleFunc("/connections/", h.handleConnectionDetail)
 }
 
 // ── Health ────────────────────────────────────────────────────────────────────
@@ -338,6 +340,61 @@ func (h *Handler) handleAssetDetail(w http.ResponseWriter, r *http.Request) {
 			jsonError(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// ── CPI Connections ───────────────────────────────────────────────────────────
+
+func (h *Handler) handleConnections(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, h.store.ListConnections())
+	case http.MethodPost:
+		var req CreateCPIConnectionRequest
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		c, err := h.store.CreateConnection(req)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		h.store.AddLog("Created CPI connection: " + c.Name)
+		writeCreated(w, c)
+	default:
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (h *Handler) handleConnectionDetail(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/connections/")
+	id = strings.Trim(id, "/")
+	if id == "" {
+		jsonError(w, "connection ID required", http.StatusBadRequest)
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		var req UpdateCPIConnectionRequest
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		c, err := h.store.UpdateConnection(id, req)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		h.store.AddLog("Updated CPI connection: " + c.Name)
+		writeJSON(w, c)
+	case http.MethodDelete:
+		if err := h.store.DeleteConnection(id); err != nil {
+			jsonError(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		h.store.AddLog("Deleted CPI connection: " + id)
 		w.WriteHeader(http.StatusNoContent)
 	default:
 		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
