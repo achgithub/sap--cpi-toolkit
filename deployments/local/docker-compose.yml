@@ -85,14 +85,13 @@ services:
     restart: unless-stopped
 
   # ── Mock adapter containers ────────────────────────────────────────────────
-  # Each adapter container uses PATH_PREFIX_MODE=true so it can serve multiple
-  # scenario adapters. The adapter ID is the first URL path segment.
-  # Images are built from the kymaadapterstub project — run:
-  #   docker build -t kymaadapterstub/rest-adapter ../kymaadapterstub/adapters/rest
-  # (and similarly for each adapter type) before starting this stack.
+  # Each adapter uses PATH_PREFIX_MODE=true so one container per type serves
+  # all scenario adapters. The adapter ID is the first URL path segment.
+  # All source is under adapters/ in this repo — built locally.
 
   rest-adapter:
-    image: kymaadapterstub/rest-adapter:latest
+    build:
+      context: ../../adapters/rest
     ports:
       - "9081:8080"
     environment:
@@ -105,7 +104,8 @@ services:
     restart: unless-stopped
 
   odata-adapter:
-    image: kymaadapterstub/odata-adapter:latest
+    build:
+      context: ../../adapters/odata
     ports:
       - "9082:8080"
     environment:
@@ -118,7 +118,8 @@ services:
     restart: unless-stopped
 
   soap-adapter:
-    image: kymaadapterstub/soap-adapter:latest
+    build:
+      context: ../../adapters/soap
     ports:
       - "9083:8080"
     environment:
@@ -131,7 +132,8 @@ services:
     restart: unless-stopped
 
   xi-adapter:
-    image: kymaadapterstub/xi-adapter:latest
+    build:
+      context: ../../adapters/xi
     ports:
       - "9084:8080"
     environment:
@@ -144,7 +146,8 @@ services:
     restart: unless-stopped
 
   as2-adapter:
-    image: kymaadapterstub/as2-adapter:latest
+    build:
+      context: ../../adapters/as2
     ports:
       - "9085:8080"
     environment:
@@ -157,7 +160,8 @@ services:
     restart: unless-stopped
 
   as4-adapter:
-    image: kymaadapterstub/as4-adapter:latest
+    build:
+      context: ../../adapters/as4
     ports:
       - "9086:8080"
     environment:
@@ -170,7 +174,8 @@ services:
     restart: unless-stopped
 
   edifact-adapter:
-    image: kymaadapterstub/edifact-adapter:latest
+    build:
+      context: ../../adapters/edifact
     ports:
       - "9087:8080"
     environment:
@@ -183,7 +188,8 @@ services:
     restart: unless-stopped
 
   sender-adapter:
-    image: kymaadapterstub/sender-adapter:latest
+    build:
+      context: ../../adapters/sender
     ports:
       - "9088:8080"
     environment:
@@ -197,7 +203,8 @@ services:
 
   # ── Standalone SFTP ───────────────────────────────────────────────────────
   sftp-adapter:
-    image: kymaadapterstub/sftp-adapter:latest
+    build:
+      context: ../../adapters/sftp
     ports:
       - "2222:2222"
     environment:
