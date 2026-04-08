@@ -24,8 +24,9 @@ func main() {
 	port := envOr("PORT", "3000")
 	deploymentEnv := envOr("DEPLOYMENT_ENV", "local")
 	baseURL := envOr("BASE_URL", "http://localhost:3000")
-	workerURL := envOr("WORKER_INTERNAL_URL", "http://localhost:8081")
-	groovyURL := envOr("GROOVY_INTERNAL_URL", "http://localhost:8082")
+	workerURL        := envOr("WORKER_INTERNAL_URL",          "http://localhost:8081")
+	groovyURL        := envOr("GROOVY_INTERNAL_URL",          "http://localhost:8082")
+	adapterURL       := envOr("ADAPTER_CONTROL_INTERNAL_URL", "http://localhost:8083")
 
 	authMiddleware := auth.New(auth.Config{
 		BypassEnabled: envOr("AUTH_BYPASS_ENABLED", "false") == "true",
@@ -36,8 +37,9 @@ func main() {
 		TenantURL:     os.Getenv("IAS_TENANT_URL"),
 	})
 
-	workerProxy := mustProxy(workerURL, "/api/worker")
-	groovyProxy := mustProxy(groovyURL, "/api/groovy")
+	workerProxy  := mustProxy(workerURL,  "/api/worker")
+	groovyProxy  := mustProxy(groovyURL,  "/api/groovy")
+	adapterProxy := mustProxy(adapterURL, "/api/adapter")
 
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -57,8 +59,9 @@ func main() {
 	mux.HandleFunc("/auth/logout", authMiddleware.LogoutHandler)
 
 	// API routes — authenticated, proxied to downstream pods
-	mux.Handle("/api/worker/", authMiddleware.Handler(workerProxy))
-	mux.Handle("/api/groovy/", authMiddleware.Handler(groovyProxy))
+	mux.Handle("/api/worker/",   authMiddleware.Handler(workerProxy))
+	mux.Handle("/api/groovy/",   authMiddleware.Handler(groovyProxy))
+	mux.Handle("/api/adapter/",  authMiddleware.Handler(adapterProxy))
 
 	// React SPA — authenticated (redirects to /auth/login if no session)
 	mux.Handle("/", authMiddleware.Handler(spaHandler(http.FileServer(http.FS(staticFS)))))

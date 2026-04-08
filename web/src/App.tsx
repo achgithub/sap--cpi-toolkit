@@ -18,6 +18,8 @@ import TestDataGen from './pages/TestDataGen'
 import GroovyIDE from './pages/GroovyIDE'
 import EDITools from './pages/EDITools'
 import ScriptLibrary from './pages/ScriptLibrary'
+import AdapterScenarios from './pages/AdapterScenarios'
+import SFTPServer from './pages/SFTPServer'
 import { type SampleInput } from './data/scriptLibrary'
 
 type ToolTab =
@@ -31,6 +33,8 @@ type ToolTab =
   | 'groovy'
   | 'edi'
   | 'library'
+  | 'adapter-scenarios'
+  | 'sftp'
 
 const GROUPS: { label: string; icon: string; tabs: { id: ToolTab; label: string; icon: string }[] }[] = [
   {
@@ -56,9 +60,11 @@ const GROUPS: { label: string; icon: string; tabs: { id: ToolTab; label: string;
     label: 'Testing',
     icon:  'simulate',
     tabs: [
-      { id: 'testdata', label: 'Test Data',      icon: 'simulate'    },
-      { id: 'keygen',   label: 'Key Generation', icon: 'key'         },
-      { id: 'certgen',  label: 'Certificates',   icon: 'certificate' },
+      { id: 'testdata',          label: 'Test Data',        icon: 'simulate'    },
+      { id: 'keygen',            label: 'Key Generation',   icon: 'key'         },
+      { id: 'certgen',           label: 'Certificates',     icon: 'certificate' },
+      { id: 'adapter-scenarios', label: 'Mock Adapters',    icon: 'connected'   },
+      { id: 'sftp',              label: 'SFTP Server',      icon: 'upload-to-cloud' },
     ],
   },
 ]
@@ -118,8 +124,10 @@ export default function App() {
         {activeTab === 'certgen'        && <CertGen />}
         {activeTab === 'testdata'       && <TestDataGen />}
         {activeTab === 'groovy'         && <GroovyIDE inject={ideInject} />}
-        {activeTab === 'edi'            && <EDITools />}
-        {activeTab === 'library'        && <ScriptLibrary onLoadInIDE={loadInIDE} />}
+        {activeTab === 'edi'                && <EDITools />}
+        {activeTab === 'library'            && <ScriptLibrary onLoadInIDE={loadInIDE} />}
+        {activeTab === 'adapter-scenarios'  && <AdapterScenarios />}
+        {activeTab === 'sftp'               && <SFTPServer />}
       </div>
     </FlexBox>
   )

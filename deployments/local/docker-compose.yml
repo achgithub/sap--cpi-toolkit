@@ -14,12 +14,14 @@ services:
       AUTH_BYPASS_ENABLED: ${AUTH_BYPASS_ENABLED:-true}
       WORKER_INTERNAL_URL: ${WORKER_INTERNAL_URL:-http://worker:8081}
       GROOVY_INTERNAL_URL: ${GROOVY_INTERNAL_URL:-http://groovy-runner:8082}
+      ADAPTER_CONTROL_INTERNAL_URL: ${ADAPTER_CONTROL_INTERNAL_URL:-http://adapter-control:8083}
       IAS_CLIENT_ID: ${IAS_CLIENT_ID:-}
       IAS_CLIENT_SECRET: ${IAS_CLIENT_SECRET:-}
       IAS_TENANT_URL: ${IAS_TENANT_URL:-}
     depends_on:
       - worker
       - groovy-runner
+      - adapter-control
     mem_limit: 128m
     restart: unless-stopped
 
@@ -69,6 +71,141 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
+
+  adapter-control:
+    build:
+      context: ../../
+      dockerfile: Dockerfile.adapter-control
+    expose:
+      - "8083"
+    environment:
+      PORT: ${ADAPTER_CONTROL_PORT:-8083}
+    mem_limit: 64m
+    restart: unless-stopped
+
+  # ── Mock adapter containers ────────────────────────────────────────────────
+  # Each adapter container uses PATH_PREFIX_MODE=true so it can serve multiple
+  # scenario adapters. The adapter ID is the first URL path segment.
+  # Images are built from the kymaadapterstub project — run:
+  #   docker build -t kymaadapterstub/rest-adapter ../kymaadapterstub/adapters/rest
+  # (and similarly for each adapter type) before starting this stack.
+
+  rest-adapter:
+    image: kymaadapterstub/rest-adapter:latest
+    ports:
+      - "9081:8080"
+    environment:
+      ADAPTER_ID: local-rest
+      CONTROL_PLANE_URL: http://adapter-control:8083
+      PATH_PREFIX_MODE: "true"
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
+  odata-adapter:
+    image: kymaadapterstub/odata-adapter:latest
+    ports:
+      - "9082:8080"
+    environment:
+      ADAPTER_ID: local-odata
+      CONTROL_PLANE_URL: http://adapter-control:8083
+      PATH_PREFIX_MODE: "true"
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
+  soap-adapter:
+    image: kymaadapterstub/soap-adapter:latest
+    ports:
+      - "9083:8080"
+    environment:
+      ADAPTER_ID: local-soap
+      CONTROL_PLANE_URL: http://adapter-control:8083
+      PATH_PREFIX_MODE: "true"
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
+  xi-adapter:
+    image: kymaadapterstub/xi-adapter:latest
+    ports:
+      - "9084:8080"
+    environment:
+      ADAPTER_ID: local-xi
+      CONTROL_PLANE_URL: http://adapter-control:8083
+      PATH_PREFIX_MODE: "true"
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
+  as2-adapter:
+    image: kymaadapterstub/as2-adapter:latest
+    ports:
+      - "9085:8080"
+    environment:
+      ADAPTER_ID: local-as2
+      CONTROL_PLANE_URL: http://adapter-control:8083
+      PATH_PREFIX_MODE: "true"
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
+  as4-adapter:
+    image: kymaadapterstub/as4-adapter:latest
+    ports:
+      - "9086:8080"
+    environment:
+      ADAPTER_ID: local-as4
+      CONTROL_PLANE_URL: http://adapter-control:8083
+      PATH_PREFIX_MODE: "true"
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
+  edifact-adapter:
+    image: kymaadapterstub/edifact-adapter:latest
+    ports:
+      - "9087:8080"
+    environment:
+      ADAPTER_ID: local-edifact
+      CONTROL_PLANE_URL: http://adapter-control:8083
+      PATH_PREFIX_MODE: "true"
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
+  sender-adapter:
+    image: kymaadapterstub/sender-adapter:latest
+    ports:
+      - "9088:8080"
+    environment:
+      ADAPTER_ID: local-sender
+      CONTROL_PLANE_URL: http://adapter-control:8083
+      PATH_PREFIX_MODE: "true"
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
+  # ── Standalone SFTP ───────────────────────────────────────────────────────
+  sftp-adapter:
+    image: kymaadapterstub/sftp-adapter:latest
+    ports:
+      - "2222:2222"
+    environment:
+      ADAPTER_ID: sftp
+      CONTROL_PLANE_URL: http://adapter-control:8083
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
     restart: unless-stopped
 
 volumes:
