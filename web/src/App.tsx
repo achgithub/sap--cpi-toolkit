@@ -36,19 +36,34 @@ type ToolTab =
   | 'adapter-scenarios'
   | 'sftp'
 
-const TABS: { id: ToolTab; label: string }[] = [
-  { id: 'xml-formatter',     label: 'XML Formatter'  },
-  { id: 'json-formatter',    label: 'JSON Formatter' },
-  { id: 'converter',         label: 'XML ↔ JSON'     },
-  { id: 'xsd-generator',     label: 'XSD Generator'  },
-  { id: 'edi',               label: 'EDI Tools'      },
-  { id: 'groovy',            label: 'Groovy IDE'     },
-  { id: 'library',           label: 'Script Library' },
-  { id: 'testdata',          label: 'Test Data'      },
-  { id: 'keygen',            label: 'Key Generation' },
-  { id: 'certgen',           label: 'Certificates'   },
-  { id: 'adapter-scenarios', label: 'Mock Adapters'  },
-  { id: 'sftp',              label: 'SFTP Server'    },
+const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
+  {
+    label: 'Format & Convert',
+    tabs: [
+      { id: 'xml-formatter',  label: 'XML Formatter'  },
+      { id: 'json-formatter', label: 'JSON Formatter' },
+      { id: 'converter',      label: 'XML ↔ JSON'     },
+      { id: 'xsd-generator',  label: 'XSD Generator'  },
+      { id: 'edi',            label: 'EDI Tools'      },
+    ],
+  },
+  {
+    label: 'Groovy',
+    tabs: [
+      { id: 'groovy',   label: 'Groovy IDE'     },
+      { id: 'library',  label: 'Script Library' },
+    ],
+  },
+  {
+    label: 'Testing',
+    tabs: [
+      { id: 'testdata',          label: 'Test Data'      },
+      { id: 'keygen',            label: 'Key Generation' },
+      { id: 'certgen',           label: 'Certificates'   },
+      { id: 'adapter-scenarios', label: 'Mock Adapters'  },
+      { id: 'sftp',              label: 'SFTP Server'    },
+    ],
+  },
 ]
 
 export default function App() {
@@ -77,12 +92,23 @@ export default function App() {
         }}
         style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}
       >
-        {TABS.map((tab) => (
+        {GROUPS.map((group) => (
           <Tab
-            key={tab.id}
-            data-id={tab.id}
-            text={tab.label}
-            selected={activeTab === tab.id}
+            key={group.label}
+            text={group.label}
+            selected={group.tabs.some(t => t.id === activeTab)}
+            items={
+              <>
+                {group.tabs.map((tab) => (
+                  <Tab
+                    key={tab.id}
+                    data-id={tab.id}
+                    text={tab.label}
+                    selected={activeTab === tab.id}
+                  />
+                ))}
+              </>
+            }
           />
         ))}
       </TabContainer>
