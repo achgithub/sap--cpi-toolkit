@@ -36,37 +36,19 @@ type ToolTab =
   | 'adapter-scenarios'
   | 'sftp'
 
-const GROUPS: { label: string; icon: string; tabs: { id: ToolTab; label: string; icon: string }[] }[] = [
-  {
-    label: 'Format & Convert',
-    icon:  'syntax',
-    tabs: [
-      { id: 'xml-formatter',  label: 'XML Formatter',  icon: 'syntax'        },
-      { id: 'json-formatter', label: 'JSON Formatter', icon: 'syntax'        },
-      { id: 'converter',      label: 'XML ↔ JSON',     icon: 'transfer'      },
-      { id: 'xsd-generator',  label: 'XSD Generator',  icon: 'document-text' },
-      { id: 'edi',            label: 'EDI Tools',      icon: 'curriculum'    },
-    ],
-  },
-  {
-    label: 'Groovy',
-    icon:  'terminal',
-    tabs: [
-      { id: 'groovy',   label: 'Groovy IDE',     icon: 'terminal' },
-      { id: 'library',  label: 'Script Library', icon: 'library'  },
-    ],
-  },
-  {
-    label: 'Testing',
-    icon:  'simulate',
-    tabs: [
-      { id: 'testdata',          label: 'Test Data',        icon: 'simulate'    },
-      { id: 'keygen',            label: 'Key Generation',   icon: 'key'         },
-      { id: 'certgen',           label: 'Certificates',     icon: 'certificate' },
-      { id: 'adapter-scenarios', label: 'Mock Adapters',    icon: 'connected'   },
-      { id: 'sftp',              label: 'SFTP Server',      icon: 'upload-to-cloud' },
-    ],
-  },
+const TABS: { id: ToolTab; label: string }[] = [
+  { id: 'xml-formatter',     label: 'XML Formatter'  },
+  { id: 'json-formatter',    label: 'JSON Formatter' },
+  { id: 'converter',         label: 'XML ↔ JSON'     },
+  { id: 'xsd-generator',     label: 'XSD Generator'  },
+  { id: 'edi',               label: 'EDI Tools'      },
+  { id: 'groovy',            label: 'Groovy IDE'     },
+  { id: 'library',           label: 'Script Library' },
+  { id: 'testdata',          label: 'Test Data'      },
+  { id: 'keygen',            label: 'Key Generation' },
+  { id: 'certgen',           label: 'Certificates'   },
+  { id: 'adapter-scenarios', label: 'Mock Adapters'  },
+  { id: 'sftp',              label: 'SFTP Server'    },
 ]
 
 export default function App() {
@@ -95,23 +77,13 @@ export default function App() {
         }}
         style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}
       >
-        {GROUPS.map((group) => (
+        {TABS.map((tab) => (
           <Tab
-            key={group.label}
-            text={group.label}
-            icon={group.icon}
-            selected={group.tabs.some(t => t.id === activeTab)}
-          >
-            {group.tabs.map((tab) => (
-              <Tab
-                key={tab.id}
-                data-id={tab.id}
-                text={tab.label}
-                icon={tab.icon}
-                selected={activeTab === tab.id}
-              />
-            ))}
-          </Tab>
+            key={tab.id}
+            data-id={tab.id}
+            text={tab.label}
+            selected={activeTab === tab.id}
+          />
         ))}
       </TabContainer>
 
