@@ -13,13 +13,20 @@ func testdataAnalyseHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Content string `json:"content"`
+		Content   string `json:"content"`
+		InputType string `json:"input_type"` // "xml" (default) or "xsd"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	result, err := testdata.Analyse(req.Content)
+	var result testdata.AnalyseResult
+	var err error
+	if req.InputType == "xsd" {
+		result, err = testdata.AnalyseXSD(req.Content)
+	} else {
+		result, err = testdata.Analyse(req.Content)
+	}
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusUnprocessableEntity)
 		return

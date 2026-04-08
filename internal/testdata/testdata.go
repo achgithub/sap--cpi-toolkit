@@ -61,10 +61,11 @@ type Field struct {
 	DetectedType string `json:"detected_type"`
 }
 
-// AnalyseResult is returned by Analyse.
+// AnalyseResult is returned by Analyse and AnalyseXSD.
 type AnalyseResult struct {
-	Fields       []Field  `json:"fields"`
-	RepeatPoints []string `json:"repeat_points"`
+	Fields              []Field  `json:"fields"`
+	RepeatPoints        []string `json:"repeat_points"`
+	SynthesizedTemplate string   `json:"synthesized_template,omitempty"` // set only by AnalyseXSD
 }
 
 // CSVTemplateResult is returned by GenerateCSVTemplate.

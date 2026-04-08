@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import {
   Button,
   Card,
@@ -29,6 +29,7 @@ interface Field {
 interface AnalyseResponse {
   fields: Field[]
   repeat_points: string[]
+  synthesized_template?: string
 }
 
 interface CSVTemplateResponse {
@@ -81,6 +82,8 @@ const TYPE_COLOUR: Record<string, string> = {
   datetime: '#c0399f',
   boolean:  '#bb0000',
 }
+
+const ALL_TYPES = ['string', 'integer', 'decimal', 'date', 'datetime', 'boolean']
 
 function TypeBadge({ type }: { type: string }) {
   return (
@@ -135,6 +138,33 @@ function downloadText(content: string, filename: string, mime = 'text/plain') {
   URL.revokeObjectURL(url)
 }
 
+// ── Type selector (used in FieldConfigPanel) ─────────────────────────────────
+
+function TypeSelector({ value, onChange }: { value: string; onChange: (t: string) => void }) {
+  return (
+    <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
+      <Label style={{ minWidth: '4rem' }}>Type</Label>
+      {ALL_TYPES.map(t => (
+        <span
+          key={t}
+          onClick={() => onChange(t)}
+          style={{
+            cursor: 'pointer',
+            fontSize: '0.7rem', fontWeight: 600,
+            padding: '0.15rem 0.45rem', borderRadius: '0.75rem',
+            background: value === t ? (TYPE_COLOUR[t] ?? '#888') : 'transparent',
+            color: value === t ? '#fff' : (TYPE_COLOUR[t] ?? '#888'),
+            border: `1px solid ${TYPE_COLOUR[t] ?? '#888'}`,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {t}
+        </span>
+      ))}
+    </FlexBox>
+  )
+}
+
 // ── Field config panel ───────────────────────────────────────────────────────
 
 function FieldConfigPanel({ config, allFields, onChange }: {
@@ -150,6 +180,9 @@ function FieldConfigPanel({ config, allFields, onChange }: {
 
   return (
     <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.5rem', paddingTop: '0.5rem' }}>
+
+      {/* Type selector */}
+      <TypeSelector value={config.type} onChange={(t) => onChange({ type: t })} />
 
       {/* Mode toggle */}
       <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.75rem' }}>
@@ -358,10 +391,18 @@ function parseCsvPreview(raw: string): { columns: string[]; rowCount: number; do
   return { columns, rowCount, docCount, isNested, error: null }
 }
 
+// ── Placeholders ──────────────────────────────────────────────────────────────
+
+const XML_PLACEHOLDER = '<Order>\n  <Header>\n    <OrderId>10001</OrderId>\n    <Date>2024-01-15</Date>\n  </Header>\n  <Items>\n    <Item><SKU>ABC-001</SKU><Qty>5</Qty></Item>\n    <Item><SKU>DEF-002</SKU><Qty>2</Qty></Item>\n  </Items>\n</Order>'
+
+const XSD_PLACEHOLDER = '<?xml version="1.0" encoding="UTF-8"?>\n<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">\n  <xs:element name="Order">\n    <xs:complexType>\n      <xs:sequence>\n        <xs:element name="Header">\n          <xs:complexType>\n            <xs:sequence>\n              <xs:element name="OrderId" type="xs:string"/>\n              <xs:element name="Date" type="xs:date"/>\n            </xs:sequence>\n          </xs:complexType>\n        </xs:element>\n        <xs:element name="Items">\n          <xs:complexType>\n            <xs:sequence>\n              <xs:element name="Item" minOccurs="1" maxOccurs="unbounded">\n                <xs:complexType>\n                  <xs:sequence>\n                    <xs:element name="SKU" type="xs:string"/>\n                    <xs:element name="Qty" type="xs:integer"/>\n                  </xs:sequence>\n                </xs:complexType>\n              </xs:element>\n            </xs:sequence>\n          </xs:complexType>\n        </xs:element>\n      </xs:sequence>\n    </xs:complexType>\n  </xs:element>\n</xs:schema>'
+
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function TestDataGen() {
-  const [xml,            setXml]            = useState('')
+  const [inputMode,      setInputMode]      = useState<'xml' | 'xsd'>('xml')
+  const [content,        setContent]        = useState('')
+  const [synthTemplate,  setSynthTemplate]  = useState('')
   const [fields,         setFields]         = useState<Field[]>([])
   const [repeatPoints,   setRepeatPoints]   = useState<string[]>([])
   const [selected,       setSelected]       = useState<Set<string>>(new Set())
@@ -374,21 +415,38 @@ export default function TestDataGen() {
   const [csvTplLoading,  setCsvTplLoading]  = useState(false)
   const [csvTplError,    setCsvTplError]    = useState<string | null>(null)
 
-  const { post, loading: analysing, error: analyseError } = useWorker<{ content: string }, AnalyseResponse>()
+  const csvUploadRef = useRef<HTMLInputElement>(null)
+
+  const { post, loading: analysing, error: analyseError } = useWorker<{ content: string; input_type: string }, AnalyseResponse>()
+
+  // ── Mode switch — clear state ──
+
+  const switchMode = (mode: 'xml' | 'xsd') => {
+    setInputMode(mode)
+    setContent(''); setFields([]); setRepeatPoints([]); setSelected(new Set())
+    setConfigs({}); setSynthTemplate(''); setGenError(null)
+    setCsvRaw(''); setCsvPreview(null)
+  }
 
   // ── Analyse ──
 
   const analyse = async () => {
-    setFields([]); setRepeatPoints([]); setSelected(new Set()); setConfigs({}); setGenError(null)
-    const res = await post('/testdata/analyse', { content: xml })
+    setFields([]); setRepeatPoints([]); setSelected(new Set()); setConfigs({})
+    setGenError(null); setSynthTemplate('')
+    const res = await post('/testdata/analyse', { content, input_type: inputMode })
     if (res) {
       setFields(res.fields)
       setRepeatPoints(res.repeat_points ?? [])
+      if (res.synthesized_template) setSynthTemplate(res.synthesized_template)
       const init: Record<string, FieldConfig> = {}
       for (const f of res.fields) init[f.path] = defaultConfig(f)
       setConfigs(init)
     }
   }
+
+  // The XML used for CSV template download and generation.
+  // In XSD mode use the synthesized template; in XML mode use the pasted XML.
+  const templateXML = inputMode === 'xsd' ? synthTemplate : content
 
   // ── CSV Template download ──
 
@@ -398,7 +456,7 @@ export default function TestDataGen() {
       const resp = await fetch('/api/worker/testdata/csv-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: xml }),
+        body: JSON.stringify({ content: templateXML }),
       })
       if (!resp.ok) {
         const json = await resp.json().catch(() => ({}))
@@ -419,6 +477,15 @@ export default function TestDataGen() {
   const onCsvChange = (raw: string) => {
     setCsvRaw(raw)
     setCsvPreview(raw.trim() ? parseCsvPreview(raw) : null)
+  }
+
+  const handleCsvFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => onCsvChange((ev.target?.result as string) ?? '')
+    reader.readAsText(file)
+    e.target.value = '' // reset so same file can be re-selected
   }
 
   const csvColumns   = csvPreview?.columns ?? []
@@ -454,7 +521,7 @@ export default function TestDataGen() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          template:  xml,
+          template:  templateXML,
           count:     docCount,
           fields:    fieldConfigs,
           csv_data:  csvRaw.trim() || undefined,
@@ -482,59 +549,87 @@ export default function TestDataGen() {
     ? (csvIsNested ? csvPreview!.docCount : csvPreview!.rowCount)
     : Math.min(1000, Math.max(1, parseInt(count, 10) || 10))
 
-  // For flat CSV, columns that don't match any field path
   const unmatchedCsvCols = !csvIsNested
     ? csvColumns.filter(c => fields.length > 0 && !fields.some(f => f.path === c))
     : []
 
-  // Flat CSV cols that match fields (for coverage display)
   const flatCsvMatchedCols = !csvIsNested ? csvColumns : []
 
   return (
     <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '1rem' }}>
 
-      {/* ── Card 1: XML Input ── */}
-      <Card header={<CardHeader titleText="1. Sample XML" subtitleText="Paste a representative XML message to analyse its structure" />}>
+      {/* ── Card 1: Schema Input ── */}
+      <Card header={
+        <CardHeader
+          titleText="1. Schema Input"
+          subtitleText={inputMode === 'xml'
+            ? 'Paste a representative XML message to analyse its structure'
+            : 'Paste an XSD schema — field types and repeat counts are read from the schema definition'}
+        />
+      }>
         <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
+
+          {/* Mode toggle */}
+          <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.75rem' }}>
+            <Label>Input type</Label>
+            <SegmentedButton
+              onSelectionChange={(e) => {
+                const m = segItem(e as unknown as Event)?.getAttribute('data-mode') as 'xml' | 'xsd' | null
+                if (m) switchMode(m)
+              }}
+            >
+              <SegmentedButtonItem data-mode="xml" selected={inputMode === 'xml'}>Sample XML</SegmentedButtonItem>
+              <SegmentedButtonItem data-mode="xsd" selected={inputMode === 'xsd'}>XSD Schema</SegmentedButtonItem>
+            </SegmentedButton>
+          </FlexBox>
+
           <TextArea
-            value={xml}
+            value={content}
             rows={12}
-            placeholder={'<Order>\n  <Header>\n    <OrderId>10001</OrderId>\n    <Date>2024-01-15</Date>\n  </Header>\n  <Items>\n    <Item><SKU>ABC-001</SKU><Qty>5</Qty></Item>\n    <Item><SKU>DEF-002</SKU><Qty>2</Qty></Item>\n  </Items>\n</Order>'}
+            placeholder={inputMode === 'xml' ? XML_PLACEHOLDER : XSD_PLACEHOLDER}
             style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
-            onInput={(e) => { setXml((e.target as unknown as HTMLTextAreaElement).value); setFields([]) }}
+            onInput={(e) => { setContent((e.target as unknown as HTMLTextAreaElement).value); setFields([]) }}
           />
+
           {analyseError && <MessageStrip design="Negative" hideCloseButton>{analyseError}</MessageStrip>}
           {csvTplError  && <MessageStrip design="Negative" hideCloseButton>{csvTplError}</MessageStrip>}
+
           <Toolbar>
-            <Button design="Emphasized" disabled={!xml.trim() || analysing} onClick={analyse}>
-              {analysing ? 'Analysing…' : 'Analyse XML'}
+            <Button design="Emphasized" disabled={!content.trim() || analysing} onClick={analyse}>
+              {analysing ? 'Analysing…' : inputMode === 'xsd' ? 'Analyse XSD' : 'Analyse XML'}
             </Button>
             {fields.length > 0 && (
-              <Button
-                design="Default"
-                icon="download"
-                disabled={csvTplLoading}
-                onClick={downloadCsvTemplate}
-              >
+              <Button design="Default" icon="download" disabled={csvTplLoading} onClick={downloadCsvTemplate}>
                 {csvTplLoading ? 'Generating…' : 'Download CSV Template'}
               </Button>
             )}
             {fields.length > 0 && (
               <Button design="Transparent" onClick={() => {
-                setXml(''); setFields([]); setRepeatPoints([]); setSelected(new Set()); setConfigs({})
+                setContent(''); setFields([]); setRepeatPoints([]); setSelected(new Set())
+                setConfigs({}); setSynthTemplate('')
                 setCsvRaw(''); setCsvPreview(null)
               }}>
                 Clear All
               </Button>
             )}
           </Toolbar>
+
+          {inputMode === 'xsd' && synthTemplate && (
+            <MessageStrip design="Positive" hideCloseButton>
+              Schema analysed — synthesized XML template generated internally
+              ({synthTemplate.split('\n').length} lines). Generation and CSV template use this automatically.
+            </MessageStrip>
+          )}
+
           {fields.length > 0 && repeatPoints.length > 0 && (
             <MessageStrip design="Information" hideCloseButton>
-              <strong>{repeatPoints.length} repeat point{repeatPoints.length !== 1 ? 's' : ''} detected</strong> —
-              elements that appear more than once per document.
-              Use <strong>Download CSV Template</strong> to get a pre-built template with a <code>__doc__</code> column
-              that supports nested 1:N structures.
-              Repeat paths: <code>{repeatPoints.join(', ')}</code>
+              <strong>{repeatPoints.length} repeat point{repeatPoints.length !== 1 ? 's' : ''} detected</strong>
+              {inputMode === 'xsd'
+                ? ' — elements with maxOccurs > 1 or unbounded. The synthesized template includes multiple instances.'
+                : ' — elements that appear more than once per document.'
+              }
+              {' '}Use <strong>Download CSV Template</strong> for a pre-built nested template.
+              Paths: <code>{repeatPoints.join(', ')}</code>
             </MessageStrip>
           )}
         </FlexBox>
@@ -554,8 +649,18 @@ export default function TestDataGen() {
               One row = one document. Leave blank to use count-based generation.<br />
               <strong>Nested CSV</strong> — use <em>Download CSV Template</em> above to generate a template with
               a <code>__doc__</code> column. Rows sharing the same <code>__doc__</code> value build one document;
-              repeating elements are expanded automatically. Field configs below are ignored in this mode.
+              repeating elements are expanded automatically.
             </MessageStrip>
+
+            {/* Upload hidden input */}
+            <input
+              ref={csvUploadRef}
+              type="file"
+              accept=".csv,text/csv"
+              style={{ display: 'none' }}
+              onChange={handleCsvFileUpload}
+            />
+
             <TextArea
               value={csvRaw}
               rows={8}
@@ -565,13 +670,13 @@ export default function TestDataGen() {
               style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
               onInput={(e) => onCsvChange((e.target as unknown as HTMLTextAreaElement).value)}
             />
+
             {csvPreview?.error && (
               <MessageStrip design="Negative" hideCloseButton>{csvPreview.error}</MessageStrip>
             )}
             {csvActive && csvIsNested && (
               <MessageStrip design="Positive" hideCloseButton>
                 Nested CSV — <strong>{csvPreview!.docCount} document{csvPreview!.docCount !== 1 ? 's' : ''}</strong> across {csvPreview!.rowCount} row{csvPreview!.rowCount !== 1 ? 's' : ''}.
-                Repeat points will be expanded from grouped rows.
               </MessageStrip>
             )}
             {csvActive && !csvIsNested && (
@@ -579,17 +684,19 @@ export default function TestDataGen() {
                 {csvPreview!.rowCount} row{csvPreview!.rowCount !== 1 ? 's' : ''} detected (flat CSV).
                 Columns: <strong>{csvColumns.join(', ')}</strong>
                 {unmatchedCsvCols.length > 0 && (
-                  <> — <span style={{ color: '#e76500' }}>
-                    No match for: {unmatchedCsvCols.join(', ')}
-                  </span></>
+                  <> — <span style={{ color: '#e76500' }}>No match for: {unmatchedCsvCols.join(', ')}</span></>
                 )}
               </MessageStrip>
             )}
-            {csvRaw.trim() && (
-              <Button design="Transparent" onClick={() => { setCsvRaw(''); setCsvPreview(null) }}>
-                Clear CSV
-              </Button>
-            )}
+
+            <Toolbar>
+              <Button icon="upload" onClick={() => csvUploadRef.current?.click()}>Upload CSV</Button>
+              {csvRaw.trim() && (
+                <Button design="Transparent" onClick={() => { setCsvRaw(''); setCsvPreview(null) }}>
+                  Clear CSV
+                </Button>
+              )}
+            </Toolbar>
           </FlexBox>
         </Card>
       )}
@@ -609,8 +716,8 @@ export default function TestDataGen() {
               </MessageStrip>
             ) : (
               <MessageStrip design="Information" hideCloseButton style={{ margin: '0 0.75rem 0.5rem' }}>
-                Repeated elements share one path entry — all instances in a document receive the same generated value.
-                Expression mode lets you build a value from other fields using <code>{'{field.path}'}</code>.
+                Tick a field to configure it. Use the <strong>Type</strong> selector to correct any incorrectly detected
+                or unknown types before choosing a generation mode.
               </MessageStrip>
             )}
             {/* Column headers */}
@@ -676,7 +783,7 @@ export default function TestDataGen() {
             )}
 
             <Toolbar>
-              <Button design="Emphasized" disabled={generating || !xml.trim()} onClick={generate}>
+              <Button design="Emphasized" disabled={generating || !templateXML.trim()} onClick={generate}>
                 {generating
                   ? 'Generating…'
                   : `Generate ${countNum} document${countNum !== 1 ? 's' : ''} (ZIP)`}
