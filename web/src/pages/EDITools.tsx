@@ -18,6 +18,7 @@ import {
   Option,
 } from '@ui5/webcomponents-react'
 import { useWorker } from '../hooks/useWorker'
+import { SaveToAssetsButton } from './AssetStore'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -357,9 +358,12 @@ export default function EDITools() {
                 {toXmlLoading ? 'Converting…' : 'Convert to XML'}
               </Button>
               {toXmlResult && (
-                <Button design="Transparent" icon="download" onClick={() => downloadText(toXmlResult, 'edi_message.xml')}>
-                  Download XML
-                </Button>
+                <>
+                  <Button design="Transparent" icon="download" onClick={() => downloadText(toXmlResult, 'edi_message.xml')}>
+                    Download XML
+                  </Button>
+                  <SaveToAssetsButton content={toXmlResult} contentType="xml" suggestedName="edi_message" />
+                </>
               )}
             </Toolbar>
             {toXmlResult && (
@@ -399,9 +403,12 @@ export default function EDITools() {
                 {fromXmlLoading ? 'Converting…' : 'Convert to EDI'}
               </Button>
               {fromXmlResult && (
-                <Button design="Transparent" icon="download" onClick={() => downloadText(fromXmlResult, 'message.edi')}>
-                  Download EDI
-                </Button>
+                <>
+                  <Button design="Transparent" icon="download" onClick={() => downloadText(fromXmlResult, 'message.edi')}>
+                    Download EDI
+                  </Button>
+                  <SaveToAssetsButton content={fromXmlResult} contentType="edi" suggestedName="message" />
+                </>
               )}
             </Toolbar>
             {fromXmlResult && (
@@ -499,6 +506,7 @@ export default function EDITools() {
                     onClick={() => downloadText(genResult, `${genMsgType.toLowerCase()}.edi`)}>
                     Download EDI
                   </Button>
+                  <SaveToAssetsButton content={genResult} contentType="edi" suggestedName={genMsgType.toLowerCase()} />
                   <ToolbarSpacer />
                   <Button design="Transparent" onClick={() => { setToXmlInput(genResult); setMode('to-xml') }}>
                     Open in EDI → XML

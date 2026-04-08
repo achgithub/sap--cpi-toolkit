@@ -17,6 +17,7 @@ import {
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
 import { useWorker } from '../hooks/useWorker'
+import { SaveToAssetsButton } from './AssetStore'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -788,6 +789,7 @@ export default function TestDataGen() {
                   ? 'Generating…'
                   : `Generate ${countNum} document${countNum !== 1 ? 's' : ''} (ZIP)`}
               </Button>
+              <SaveToAssetsButton content={templateXML} contentType="xml" suggestedName="test_template" />
               <ToolbarSpacer />
               <Label style={{ color: 'var(--sapNeutralColor)' }}>
                 {csvIsNested

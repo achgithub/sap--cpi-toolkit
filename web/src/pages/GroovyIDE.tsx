@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { type SampleInput } from '../data/scriptLibrary'
+import { SaveToAssetsButton } from './AssetStore'
 import {
   Button,
   Card,
@@ -200,6 +201,7 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
               style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
               onInput={(e) => setHeadersRaw((e.target as unknown as HTMLTextAreaElement).value)}
             />
+            <SaveToAssetsButton content={headersRaw} contentType="headers" />
 
             <Label style={{ fontWeight: 600 }}>
               Properties <span style={{ color: 'var(--sapNeutralColor)', fontWeight: 400 }}>(Key: Value, one per line)</span>
@@ -211,6 +213,7 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
               style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
               onInput={(e) => setPropsRaw((e.target as unknown as HTMLTextAreaElement).value)}
             />
+            <SaveToAssetsButton content={propsRaw} contentType="properties" />
           </FlexBox>
         </Card>
 
