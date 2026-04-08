@@ -1,23 +1,48 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/achgithub/sap-cpi-toolkit/internal/adaptercontrol"
 )
 
 func main() {
-	port := envOr("PORT", "8083")
+	port  := envOr("PORT", "8083")
+	dbURL := envOr("DB_URL", "postgres://toolkit:toolkit@postgres:5432/toolkit?sslmode=disable")
 
-	store := adaptercontrol.NewStore()
+	ctx := context.Background()
+
+	// Connect to Postgres with retries (postgres may still be starting).
+	var pool interface{ Close() }
+	var store *adaptercontrol.Store
+	for attempt := 1; attempt <= 10; attempt++ {
+		db, err := adaptercontrol.InitDB(ctx, dbURL)
+		if err != nil {
+			log.Printf("[adapter-control] db connect attempt %d/10 failed: %v", attempt, err)
+			time.Sleep(time.Duration(attempt) * time.Second)
+			continue
+		}
+		store = adaptercontrol.NewStore(db)
+		pool = db
+		break
+	}
+	if store == nil {
+		log.Fatal("[adapter-control] could not connect to database after 10 attempts")
+	}
+	defer pool.Close()
+
+	if err := store.InitSFTP(ctx); err != nil {
+		log.Printf("[adapter-control] warning: InitSFTP: %v", err)
+	}
+
 	handler := adaptercontrol.NewHandler(store)
-
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 
-	// Wrap with CORS so the React dev server can call directly if needed.
 	addr := ":" + port
 	log.Printf("[adapter-control] listening on %s", addr)
 	if err := http.ListenAndServe(addr, corsMiddleware(mux)); err != nil {
@@ -45,4 +70,3 @@ func envOr(key, fallback string) string {
 	}
 	return fallback
 }
-

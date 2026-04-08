@@ -81,6 +81,10 @@ services:
       - "8083"
     environment:
       PORT: ${ADAPTER_CONTROL_PORT:-8083}
+      DB_URL: ${DB_URL:-postgres://toolkit:toolkit@postgres:5432/toolkit?sslmode=disable}
+    depends_on:
+      postgres:
+        condition: service_healthy
     mem_limit: 64m
     restart: unless-stopped
 
