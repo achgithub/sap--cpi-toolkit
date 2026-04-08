@@ -81,11 +81,10 @@ async function apiFetch(path: string, opts?: RequestInit) {
   return res.json()
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AdapterScenarios() {
   const [scenarios,  setScenarios]  = useState<Scenario[]>([])
-  const [selected,   setSelected]   = useState<Scenario | null>(null)
   const [error,      setError]      = useState('')
 
   // New scenario form
@@ -99,12 +98,8 @@ export default function AdapterScenarios() {
     try {
       const data: Scenario[] = await apiFetch('/scenarios')
       setScenarios(data ?? [])
-      if (selected) {
-        const refreshed = (data ?? []).find(s => s.id === selected.id)
-        setSelected(refreshed ?? null)
-      }
     } catch (e: any) { setError(e.message) }
-  }, [selected])
+  }, [])
 
   useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -127,14 +122,8 @@ export default function AdapterScenarios() {
     if (!window.confirm('Delete this scenario and all its adapters?')) return
     try {
       await apiFetch('/scenarios/' + id, { method: 'DELETE' })
-      if (selected?.id === id) setSelected(null)
       await load()
     } catch (e: any) { setError(e.message) }
-  }
-
-  if (selected) {
-    return <ScenarioDetail scenario={selected} onBack={() => setSelected(null)}
-      onDelete={deleteScenario} onRefresh={load} error={error} setError={setError} />
   }
 
   return (
@@ -177,46 +166,28 @@ export default function AdapterScenarios() {
         </MessageStrip>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-        {scenarios.map(sc => (
-          <Card key={sc.id} header={
-            <CardHeader
-              titleText={sc.name}
-              subtitleText={sc.description || `${sc.adapters.length} adapter${sc.adapters.length !== 1 ? 's' : ''}`}
-              action={
-                <Button design="Transparent" icon="delete"
-                  onClick={(e) => { e.stopPropagation(); deleteScenario(sc.id) }} />
-              }
-              onClick={() => setSelected(sc)}
-              interactive
-            />
-          }>
-            <div style={{ padding: '0.5rem 1rem 1rem', display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-              {sc.adapters.map(a => (
-                <span key={a.id} style={{
-                  background: a.behavior_mode === 'failure' ? 'var(--sapErrorColor)' : 'var(--sapSuccessColor)',
-                  color: '#fff', borderRadius: '0.75rem', padding: '0.1rem 0.5rem', fontSize: '0.75rem'
-                }}>{a.type}</span>
-              ))}
-              {sc.adapters.length === 0 && <Label style={{ color: 'var(--sapContent_LabelColor)' }}>No adapters</Label>}
-            </div>
-          </Card>
-        ))}
-      </div>
+      {scenarios.map(sc => (
+        <ScenarioRow
+          key={sc.id}
+          scenario={sc}
+          onDelete={() => deleteScenario(sc.id)}
+          onRefresh={load}
+          setError={setError}
+        />
+      ))}
     </FlexBox>
   )
 }
 
-// ── Scenario detail ───────────────────────────────────────────────────────────
+// ── Scenario row (inline expand) ──────────────────────────────────────────────
 
-function ScenarioDetail({ scenario, onBack, onDelete, onRefresh, error, setError }: {
+function ScenarioRow({ scenario, onDelete, onRefresh, setError }: {
   scenario: Scenario
-  onBack: () => void
-  onDelete: (id: string) => void
+  onDelete: () => void
   onRefresh: () => void
-  error: string
   setError: (e: string) => void
 }) {
+  const [expanded,     setExpanded]     = useState(false)
   const [showAdd,      setShowAdd]      = useState(false)
   const [adapterName,  setAdapterName]  = useState('')
   const [adapterType,  setAdapterType]  = useState('REST')
@@ -229,7 +200,6 @@ function ScenarioDetail({ scenario, onBack, onDelete, onRefresh, error, setError
   const addAdapter = async () => {
     if (!adapterName.trim()) return
     setAdding(true)
-    setError('')
     try {
       const body: any = {
         name: adapterName.trim(), type: adapterType,
@@ -265,83 +235,108 @@ function ScenarioDetail({ scenario, onBack, onDelete, onRefresh, error, setError
     } catch (e: any) { setError(e.message) }
   }
 
+  const adapterCount = scenario.adapters.length
+
   return (
-    <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '1rem' }}>
-      {error && <MessageStrip design="Negative" onClose={() => setError('')}>{error}</MessageStrip>}
+    <Card>
+      {/* ── Header row ── */}
+      <FlexBox style={{ padding: '0.75rem 1rem', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}
+        onClick={() => setExpanded(v => !v)}>
+        <span style={{ fontSize: '0.9rem', color: 'var(--sapContent_IconColor)' }}>
+          {expanded ? '▾' : '▸'}
+        </span>
+        <FlexBox direction={FlexBoxDirection.Column} style={{ flex: 1, gap: '0.1rem' }}>
+          <span style={{ fontWeight: 600, fontSize: '1rem' }}>{scenario.name}</span>
+          {scenario.description && (
+            <span style={{ fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)' }}>{scenario.description}</span>
+          )}
+        </FlexBox>
+        {/* Adapter type badges */}
+        <FlexBox style={{ gap: '0.25rem', flexWrap: 'wrap' }}>
+          {scenario.adapters.map(a => (
+            <span key={a.id} style={{
+              background: a.behavior_mode === 'failure' ? 'var(--sapErrorColor)' : 'var(--sapSuccessColor)',
+              color: '#fff', borderRadius: '0.75rem', padding: '0.1rem 0.5rem', fontSize: '0.72rem', fontWeight: 600,
+            }}>{a.type}</span>
+          ))}
+          {adapterCount === 0 && (
+            <span style={{ fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)' }}>No adapters</span>
+          )}
+        </FlexBox>
+        {/* Actions — stop propagation so clicks don't toggle expand */}
+        <FlexBox style={{ gap: '0.25rem' }} onClick={(e) => e.stopPropagation()}>
+          <Button design="Transparent" icon="add" onClick={() => { setExpanded(true); setShowAdd(v => !v) }} />
+          <Button design="Transparent" icon="delete" onClick={onDelete} />
+        </FlexBox>
+      </FlexBox>
 
-      <Toolbar>
-        <Button design="Transparent" icon="nav-back" onClick={onBack} />
-        <Label style={{ fontSize: '1.25rem', fontWeight: 600, marginLeft: '0.5rem' }}>{scenario.name}</Label>
-        <ToolbarSpacer />
-        <Button design="Transparent" icon="refresh" onClick={onRefresh} />
-        <Button design="Attention" icon="delete" onClick={() => onDelete(scenario.id)}>Delete</Button>
-        <Button design="Emphasized" icon="add" onClick={() => setShowAdd(v => !v)}>Add Adapter</Button>
-      </Toolbar>
+      {/* ── Expanded content ── */}
+      {expanded && (
+        <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '0 1rem 1rem', gap: '0.75rem' }}>
 
-      {scenario.description && (
-        <Label style={{ color: 'var(--sapTextColor)' }}>{scenario.description}</Label>
-      )}
+          {/* Add adapter form */}
+          {showAdd && (
+            <Card header={<CardHeader titleText="Add Adapter" />}>
+              <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.75rem', padding: '1rem' }}>
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+                  <Label required>Name</Label>
+                  <Input value={adapterName} onInput={(e: any) => setAdapterName(e.target.value)}
+                    placeholder="e.g. Payment API" style={{ width: '100%' }} />
+                </FlexBox>
+                <FlexBox style={{ gap: '1rem' }}>
+                  <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1 }}>
+                    <Label>Type</Label>
+                    <Select style={{ width: '100%' }} onChange={(e: any) => setAdapterType(e.detail.selectedOption.value)}>
+                      {ADAPTER_TYPES.map(t => <Option key={t} value={t} selected={t === adapterType}>{t}</Option>)}
+                    </Select>
+                  </FlexBox>
+                  <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1 }}>
+                    <Label>Behaviour</Label>
+                    <Select style={{ width: '100%' }} onChange={(e: any) => setAdapterMode(e.detail.selectedOption.value)}>
+                      <Option value="success" selected={adapterMode === 'success'}>Success</Option>
+                      <Option value="failure" selected={adapterMode === 'failure'}>Failure</Option>
+                    </Select>
+                  </FlexBox>
+                </FlexBox>
 
-      {showAdd && (
-        <Card header={<CardHeader titleText="Add Adapter" />}>
-          <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.75rem', padding: '1rem' }}>
-            <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
-              <Label required>Name</Label>
-              <Input value={adapterName} onInput={(e: any) => setAdapterName(e.target.value)}
-                placeholder="e.g. Payment API" style={{ width: '100%' }} />
-            </FlexBox>
-            <FlexBox style={{ gap: '1rem' }}>
-              <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1 }}>
-                <Label>Type</Label>
-                <Select style={{ width: '100%' }} onChange={(e: any) => setAdapterType(e.detail.selectedOption.value)}>
-                  {ADAPTER_TYPES.map(t => <Option key={t} value={t} selected={t === adapterType}>{t}</Option>)}
-                </Select>
+                <AdapterConfigForm type={adapterType} config={adapterConfig} onChange={setAdapterConfig} />
+
+                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+                  <Label>Inbound Auth (optional)</Label>
+                  <FlexBox style={{ gap: '0.5rem' }}>
+                    <Input value={adapterUser} onInput={(e: any) => setAdapterUser(e.target.value)}
+                      placeholder="Username" style={{ flex: 1 }} />
+                    <Input type="Password" value={adapterPass} onInput={(e: any) => setAdapterPass(e.target.value)}
+                      placeholder="Password" style={{ flex: 1 }} />
+                  </FlexBox>
+                </FlexBox>
+
+                <FlexBox style={{ gap: '0.5rem' }}>
+                  <Button onClick={() => { setShowAdd(false); setAdapterName('') }}>Cancel</Button>
+                  <Button design="Emphasized" onClick={addAdapter} disabled={adding || !adapterName.trim()}>
+                    {adding ? 'Adding…' : 'Add'}
+                  </Button>
+                </FlexBox>
               </FlexBox>
-              <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1 }}>
-                <Label>Behaviour</Label>
-                <Select style={{ width: '100%' }} onChange={(e: any) => setAdapterMode(e.detail.selectedOption.value)}>
-                  <Option value="success" selected={adapterMode === 'success'}>Success</Option>
-                  <Option value="failure" selected={adapterMode === 'failure'}>Failure</Option>
-                </Select>
-              </FlexBox>
-            </FlexBox>
+            </Card>
+          )}
 
-            <AdapterConfigForm type={adapterType} config={adapterConfig} onChange={setAdapterConfig} />
+          {scenario.adapters.length === 0 && !showAdd && (
+            <MessageStrip design="Information" hideCloseButton>
+              No adapters yet. Click + to add one.
+            </MessageStrip>
+          )}
 
-            <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
-              <Label>Inbound Auth (optional)</Label>
-              <FlexBox style={{ gap: '0.5rem' }}>
-                <Input value={adapterUser} onInput={(e: any) => setAdapterUser(e.target.value)}
-                  placeholder="Username" style={{ flex: 1 }} />
-                <Input type="Password" value={adapterPass} onInput={(e: any) => setAdapterPass(e.target.value)}
-                  placeholder="Password" style={{ flex: 1 }} />
-              </FlexBox>
-            </FlexBox>
-
-            <FlexBox style={{ gap: '0.5rem' }}>
-              <Button onClick={() => { setShowAdd(false); setAdapterName('') }}>Cancel</Button>
-              <Button design="Emphasized" onClick={addAdapter} disabled={adding || !adapterName.trim()}>
-                {adding ? 'Adding…' : 'Add'}
-              </Button>
-            </FlexBox>
-          </FlexBox>
-        </Card>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '0.75rem' }}>
+            {scenario.adapters.map(a => (
+              <AdapterCard key={a.id} adapter={a}
+                onDelete={() => deleteAdapter(a.id)}
+                onToggleBehavior={() => toggleBehavior(a)} />
+            ))}
+          </div>
+        </FlexBox>
       )}
-
-      {scenario.adapters.length === 0 && !showAdd && (
-        <MessageStrip design="Information" hideCloseButton>
-          No adapters yet. Add one to configure a mock endpoint.
-        </MessageStrip>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1rem' }}>
-        {scenario.adapters.map(a => (
-          <AdapterCard key={a.id} adapter={a}
-            onDelete={() => deleteAdapter(a.id)}
-            onToggleBehavior={() => toggleBehavior(a)} />
-        ))}
-      </div>
-    </FlexBox>
+    </Card>
   )
 }
 
