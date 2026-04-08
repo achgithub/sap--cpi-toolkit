@@ -35,6 +35,23 @@ func NewStore(db *pgxpool.Pool) *Store {
 	}
 }
 
+// InitUnassigned ensures the "Unassigned" catch-all scenario exists. Call once on startup.
+func (s *Store) InitUnassigned(ctx context.Context) error {
+	var count int
+	if err := s.db.QueryRow(ctx, `SELECT COUNT(*) FROM ac_scenarios WHERE id = 'unassigned'`).Scan(&count); err != nil {
+		return fmt.Errorf("check unassigned row: %w", err)
+	}
+	if count > 0 {
+		return nil
+	}
+	now := time.Now()
+	_, err := s.db.Exec(ctx,
+		`INSERT INTO ac_scenarios (id, name, description, created_at, updated_at)
+		 VALUES ('unassigned', 'Unassigned', 'Catch-all scenario for adapters not yet assigned to a flow', $1, $1)`,
+		now)
+	return err
+}
+
 // InitSFTP ensures the SFTP singleton row exists. Call once on startup.
 func (s *Store) InitSFTP(ctx context.Context) error {
 	var count int
@@ -211,7 +228,12 @@ func (s *Store) CreateAdapter(scenarioID string, req CreateAdapterRequest) (*Ada
 		return nil, fmt.Errorf("scenario not found: %s", scenarioID)
 	}
 
-	id := scenarioID + "-" + slugify(req.Type) + "-" + fmt.Sprintf("%d", time.Now().UnixMilli())
+	var id string
+	if req.Slug != "" {
+		id = slugify(req.Slug)
+	} else {
+		id = slugify(req.Name) + "-" + fmt.Sprintf("%d", time.Now().UnixMilli())
+	}
 	bm := req.BehaviorMode
 	if bm == "" {
 		bm = "success"

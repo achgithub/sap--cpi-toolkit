@@ -35,6 +35,9 @@ func main() {
 	}
 	defer pool.Close()
 
+	if err := store.InitUnassigned(ctx); err != nil {
+		log.Printf("[adapter-control] warning: InitUnassigned: %v", err)
+	}
 	if err := store.InitSFTP(ctx); err != nil {
 		log.Printf("[adapter-control] warning: InitSFTP: %v", err)
 	}

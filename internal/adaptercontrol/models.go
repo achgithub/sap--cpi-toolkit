@@ -186,6 +186,7 @@ type UpdateScenarioRequest struct {
 
 type CreateAdapterRequest struct {
 	Name         string        `json:"name"`
+	Slug         string        `json:"slug"`          // user-defined URL path segment; used as adapter ID
 	Type         string        `json:"type"`
 	BehaviorMode string        `json:"behavior_mode"`
 	Config       AdapterConfig `json:"config"`
