@@ -71,11 +71,113 @@ const ADAPTER_TYPES = [
   'REST-SENDER', 'SOAP-SENDER', 'XI-SENDER',
 ]
 
+// Adapter types that act as senders (they call CPI, not the other way around)
+const SENDER_TYPES = new Set(['REST-SENDER', 'SOAP-SENDER', 'XI-SENDER'])
+
 const DEFAULT_CONFIG: AdapterConfig = {
   status_code: 200,
   response_body: '',
   response_headers: {},
   response_delay_ms: 0,
+}
+
+// Protocol-specific default response bodies and headers.
+// Used to pre-fill the add-adapter and wizard forms so the mock is valid out of the box.
+const ADAPTER_TEMPLATES: Record<string, { body: string; headers: Record<string, string> }> = {
+  SOAP: {
+    body: `<?xml version="1.0" encoding="UTF-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header/>
+  <soap:Body>
+    <Response>
+      <Status>OK</Status>
+    </Response>
+  </soap:Body>
+</soap:Envelope>`,
+    headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+  },
+  XI: {
+    body: `<?xml version="1.0" encoding="UTF-8"?>
+<SOAP:Envelope xmlns:SOAP="http://schemas.xmlsoap.org/soap/envelope/" xmlns:SAP-RM="http://sap.com/xi/XI/System/">
+  <SOAP:Header>
+    <SAP-RM:MessageHeader SOAP:mustUnderstand="0">
+      <SAP-RM:Id>stub-response-001</SAP-RM:Id>
+    </SAP-RM:MessageHeader>
+  </SOAP:Header>
+  <SOAP:Body>
+    <Response>
+      <Status>OK</Status>
+    </Response>
+  </SOAP:Body>
+</SOAP:Envelope>`,
+    headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+  },
+  OData: {
+    body: `<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"
+      xmlns:d="http://schemas.microsoft.com/ado/2007/08/dataservices"
+      xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+  <title type="text">Entities</title>
+  <entry>
+    <content type="application/xml">
+      <m:properties>
+        <d:ID>1</d:ID>
+        <d:Name>Sample Entity</d:Name>
+      </m:properties>
+    </content>
+  </entry>
+</feed>`,
+    headers: { 'Content-Type': 'application/xml', 'OData-Version': '2.0' },
+  },
+  REST: {
+    body: `{"status": "ok"}`,
+    headers: { 'Content-Type': 'application/json' },
+  },
+  AS2: {
+    body: ``,
+    headers: { 'Content-Type': 'message/disposition-notification', 'AS2-Version': '1.2' },
+  },
+  AS4: {
+    body: `<?xml version="1.0" encoding="UTF-8"?>
+<S:Envelope xmlns:S="http://www.w3.org/2003/05/soap-envelope">
+  <S:Body>
+    <eb:SignalMessage xmlns:eb="http://docs.oasis-open.org/ebxml-msg/ebms/v3.0/ns/core/200704/">
+      <eb:MessageInfo>
+        <eb:Timestamp>2026-01-01T00:00:00Z</eb:Timestamp>
+        <eb:MessageId>stub-receipt@example.com</eb:MessageId>
+      </eb:MessageInfo>
+      <eb:Receipt/>
+    </eb:SignalMessage>
+  </S:Body>
+</S:Envelope>`,
+    headers: { 'Content-Type': 'application/soap+xml' },
+  },
+  EDIFACT: {
+    body: `UNB+UNOA:1+RECEIVER:1+SENDER:1+260101:1200+00001'\nUNH+1+APERAK:D:96A:UN'\nBGM+313+ACK001'\nUNT+3+1'\nUNZ+1+00001'`,
+    headers: { 'Content-Type': 'application/edifact' },
+  },
+}
+
+function templateConfig(type: string): AdapterConfig {
+  const t = ADAPTER_TEMPLATES[type]
+  return {
+    ...DEFAULT_CONFIG,
+    response_body:    t?.body    ?? '',
+    response_headers: t?.headers ?? {},
+  }
+}
+
+function kvToString(obj: Record<string, string>): string {
+  return Object.entries(obj).map(([k, v]) => `${k}: ${v}`).join('\n')
+}
+
+function parseKV(raw: string): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const line of raw.split('\n')) {
+    const i = line.indexOf(':')
+    if (i > 0) result[line.slice(0, i).trim()] = line.slice(i + 1).trim()
+  }
+  return result
 }
 
 // ── API ───────────────────────────────────────────────────────────────────────
@@ -357,10 +459,15 @@ function ScenarioRow({ scenario, onDelete, onRefresh, setError }: {
   const [adapterName,  setAdapterName]  = useState('')
   const [adapterType,  setAdapterType]  = useState('REST')
   const [adapterMode,  setAdapterMode]  = useState('success')
-  const [adapterConfig, setAdapterConfig] = useState<AdapterConfig>(DEFAULT_CONFIG)
+  const [adapterConfig, setAdapterConfig] = useState<AdapterConfig>(templateConfig('REST'))
   const [adapterUser,  setAdapterUser]  = useState('')
   const [adapterPass,  setAdapterPass]  = useState('')
   const [adding,       setAdding]       = useState(false)
+
+  const changeAdapterType = (t: string) => {
+    setAdapterType(t)
+    setAdapterConfig(templateConfig(t))
+  }
 
   const addAdapter = async () => {
     if (!adapterName.trim()) return
@@ -375,7 +482,7 @@ function ScenarioRow({ scenario, onDelete, onRefresh, setError }: {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       setShowAdd(false); setAdapterName(''); setAdapterUser(''); setAdapterPass('')
-      setAdapterConfig(DEFAULT_CONFIG)
+      setAdapterConfig(templateConfig('REST')); setAdapterType('REST')
       await onRefresh()
     } catch (e: any) { setError(e.message) }
     finally { setAdding(false) }
@@ -451,8 +558,8 @@ function ScenarioRow({ scenario, onDelete, onRefresh, setError }: {
                 <FlexBox style={{ gap: '1rem' }}>
                   <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1 }}>
                     <Label>Type</Label>
-                    <Select style={{ width: '100%' }} onChange={(e: any) => setAdapterType(e.detail.selectedOption.value)}>
-                      {ADAPTER_TYPES.map(t => <Option key={t} value={t} selected={t === adapterType}>{t}</Option>)}
+                    <Select style={{ width: '100%' }} onChange={(e: any) => changeAdapterType(e.detail.selectedOption.value)}>
+                      {ADAPTER_TYPES.map(t => <Option key={t} value={t} selected={t === adapterType}>{t}{SENDER_TYPES.has(t) ? ' ↑' : ' ↓'}</Option>)}
                     </Select>
                   </FlexBox>
                   <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1 }}>
@@ -492,11 +599,13 @@ function ScenarioRow({ scenario, onDelete, onRefresh, setError }: {
             </MessageStrip>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '0.75rem' }}>
             {scenario.adapters.map(a => (
-              <AdapterCard key={a.id} adapter={a}
+              <AdapterCard key={a.id} adapter={a} scenarioId={scenario.id}
                 onDelete={() => deleteAdapter(a.id)}
-                onToggleBehavior={() => toggleBehavior(a)} />
+                onToggleBehavior={() => toggleBehavior(a)}
+                onRefresh={onRefresh}
+                setError={setError} />
             ))}
           </div>
         </FlexBox>
@@ -507,20 +616,98 @@ function ScenarioRow({ scenario, onDelete, onRefresh, setError }: {
 
 // ── Adapter card ──────────────────────────────────────────────────────────────
 
-function AdapterCard({ adapter, onDelete, onToggleBehavior }: {
-  adapter: Adapter; onDelete: () => void; onToggleBehavior: () => void
+function AdapterCard({ adapter, scenarioId, onDelete, onToggleBehavior, onRefresh, setError }: {
+  adapter: Adapter
+  scenarioId: string
+  onDelete: () => void
+  onToggleBehavior: () => void
+  onRefresh: () => void
+  setError: (e: string) => void
 }) {
+  const [editing,     setEditing]     = useState(false)
+  const [editName,    setEditName]    = useState(adapter.name)
+  const [editMode,    setEditMode]    = useState(adapter.behavior_mode)
+  const [editConfig,  setEditConfig]  = useState<AdapterConfig>(adapter.config)
+  const [editUser,    setEditUser]    = useState(adapter.credentials?.username ?? '')
+  const [editPass,    setEditPass]    = useState(adapter.credentials?.password ?? '')
+  const [saving,      setSaving]      = useState(false)
+
+  const openEdit = () => {
+    setEditName(adapter.name)
+    setEditMode(adapter.behavior_mode)
+    setEditConfig(adapter.config)
+    setEditUser(adapter.credentials?.username ?? '')
+    setEditPass(adapter.credentials?.password ?? '')
+    setEditing(true)
+  }
+
+  const save = async () => {
+    setSaving(true)
+    try {
+      const body: any = { name: editName.trim(), behavior_mode: editMode, config: editConfig }
+      if (editUser) body.credentials = { username: editUser, password: editPass }
+      else body.credentials = null
+      await apiFetch('/scenarios/' + scenarioId + '/adapters/' + adapter.id, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      setEditing(false)
+      await onRefresh()
+    } catch (e: any) { setError(e.message) }
+    finally { setSaving(false) }
+  }
+
   const isFailure = adapter.behavior_mode === 'failure'
+  const isSender  = SENDER_TYPES.has(adapter.type)
+
+  if (editing) {
+    return (
+      <Card header={<CardHeader titleText={`Edit — ${adapter.name}`} subtitleText={adapter.type} />}>
+        <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.75rem', padding: '1rem' }}>
+          <FlexBox style={{ gap: '1rem' }}>
+            <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 2 }}>
+              <Label>Name</Label>
+              <Input value={editName} onInput={(e: any) => setEditName(e.target.value)} style={{ width: '100%' }} />
+            </FlexBox>
+            <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1 }}>
+              <Label>Behaviour</Label>
+              <Select style={{ width: '100%' }} onChange={(e: any) => setEditMode(e.detail.selectedOption.value)}>
+                <Option value="success" selected={editMode === 'success'}>Success</Option>
+                <Option value="failure" selected={editMode === 'failure'}>Failure</Option>
+              </Select>
+            </FlexBox>
+          </FlexBox>
+          <AdapterConfigForm type={adapter.type} config={editConfig} onChange={setEditConfig} />
+          <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+            <Label>Inbound Auth (optional)</Label>
+            <FlexBox style={{ gap: '0.5rem' }}>
+              <Input value={editUser} onInput={(e: any) => setEditUser(e.target.value)}
+                placeholder="Username" style={{ flex: 1 }} />
+              <Input type="Password" value={editPass} onInput={(e: any) => setEditPass(e.target.value)}
+                placeholder="Password" style={{ flex: 1 }} />
+            </FlexBox>
+          </FlexBox>
+          <FlexBox style={{ gap: '0.5rem' }}>
+            <Button onClick={() => setEditing(false)}>Cancel</Button>
+            <Button design="Emphasized" onClick={save} disabled={saving || !editName.trim()}>
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </FlexBox>
+        </FlexBox>
+      </Card>
+    )
+  }
+
   return (
     <Card header={
       <CardHeader
         titleText={adapter.name}
-        subtitleText={adapter.type}
+        subtitleText={`${adapter.type} ${isSender ? '↑ Outbound' : '↓ Inbound'}`}
         action={
           <FlexBox style={{ gap: '0.25rem' }}>
             <Button design={isFailure ? 'Attention' : 'Default'} onClick={onToggleBehavior}>
               {isFailure ? 'Failure' : 'Success'}
             </Button>
+            <Button design="Transparent" icon="edit" onClick={openEdit} />
             <Button design="Transparent" icon="delete" onClick={onDelete} />
           </FlexBox>
         }
@@ -528,18 +715,35 @@ function AdapterCard({ adapter, onDelete, onToggleBehavior }: {
     }>
       <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.5rem', padding: '0.75rem 1rem 1rem' }}>
         <Label style={{ fontWeight: 600 }}>Endpoint URL</Label>
-        <code style={{
-          background: 'var(--sapField_Background)', border: '1px solid var(--sapField_BorderColor)',
-          borderRadius: '4px', padding: '0.25rem 0.5rem', fontSize: '0.8rem', wordBreak: 'break-all',
-        }}>
-          {adapter.ingress_url || '—'}
-        </code>
+        <FlexBox style={{ gap: '0.5rem', alignItems: 'center' }}>
+          <code style={{
+            flex: 1, background: 'var(--sapField_Background)', border: '1px solid var(--sapField_BorderColor)',
+            borderRadius: '4px', padding: '0.25rem 0.5rem', fontSize: '0.8rem', wordBreak: 'break-all',
+          }}>
+            {adapter.ingress_url || '—'}
+          </code>
+          {adapter.ingress_url && (
+            <Button design="Transparent" icon="copy"
+              onClick={() => navigator.clipboard.writeText(adapter.ingress_url).catch(() => {})} />
+          )}
+        </FlexBox>
         <FlexBox style={{ gap: '1rem', fontSize: '0.875rem' }}>
           {adapter.config.status_code > 0 && <span>Status: <b>{adapter.config.status_code}</b></span>}
           {adapter.config.response_delay_ms > 0 && <span>Delay: {adapter.config.response_delay_ms}ms</span>}
+          {Object.keys(adapter.config.response_headers ?? {}).length > 0 && (
+            <span>{Object.keys(adapter.config.response_headers).length} header{Object.keys(adapter.config.response_headers).length !== 1 ? 's' : ''}</span>
+          )}
         </FlexBox>
+        {adapter.config.response_body && (
+          <div style={{
+            fontFamily: 'monospace', fontSize: '0.72rem', color: 'var(--sapContent_LabelColor)',
+            maxHeight: '3rem', overflow: 'hidden', whiteSpace: 'pre',
+          }}>
+            {adapter.config.response_body.slice(0, 200)}
+          </div>
+        )}
         {adapter.last_activity && (
-          <Label>Last activity: {new Date(adapter.last_activity).toLocaleTimeString()}</Label>
+          <Label style={{ fontSize: '0.78rem' }}>Last hit: {new Date(adapter.last_activity).toLocaleTimeString()}</Label>
         )}
       </FlexBox>
     </Card>
@@ -553,6 +757,7 @@ function AdapterConfigForm({ type, config, onChange }: {
 }) {
   const set = (patch: Partial<AdapterConfig>) => onChange({ ...config, ...patch })
   const isSender = type.endsWith('-SENDER')
+  const headersRaw = kvToString(config.response_headers ?? {})
 
   return (
     <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.75rem' }}>
@@ -573,7 +778,17 @@ function AdapterConfigForm({ type, config, onChange }: {
           <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
             <Label>Request Body</Label>
             <TextArea value={config.request_body ?? ''} onInput={(e: any) => set({ request_body: e.target.value })}
-              rows={3} style={{ width: '100%' }} />
+              rows={3} style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }} />
+          </FlexBox>
+          <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+            <Label>Request Headers <span style={{ color: 'var(--sapContent_LabelColor)', fontWeight: 400 }}>(Key: Value, one per line)</span></Label>
+            <TextArea
+              value={kvToString(config.request_headers ?? {})}
+              rows={3}
+              placeholder="Content-Type: application/xml"
+              style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
+              onInput={(e: any) => set({ request_headers: parseKV(e.target.value) })}
+            />
           </FlexBox>
         </>
       ) : (
@@ -591,9 +806,19 @@ function AdapterConfigForm({ type, config, onChange }: {
             </FlexBox>
           </FlexBox>
           <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
+            <Label>Response Headers <span style={{ color: 'var(--sapContent_LabelColor)', fontWeight: 400 }}>(Key: Value, one per line)</span></Label>
+            <TextArea
+              value={headersRaw}
+              rows={3}
+              placeholder="Content-Type: application/json"
+              style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
+              onInput={(e: any) => set({ response_headers: parseKV(e.target.value) })}
+            />
+          </FlexBox>
+          <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
             <Label>Response Body</Label>
             <TextArea value={config.response_body} onInput={(e: any) => set({ response_body: e.target.value })}
-              rows={4} style={{ width: '100%' }} />
+              rows={8} style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }} />
           </FlexBox>
           {(type === 'SOAP' || type === 'XI') && (
             <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem' }}>
@@ -639,13 +864,6 @@ const TYPE_BADGE: Record<string, { bg: string; label: string }> = {
   properties: { bg: '#9333ea', label: 'Properties' },
 }
 
-function parseKVHeaders(raw: string): Record<string, string> {
-  const result: Record<string, string> = {}
-  for (const line of raw.split('\n')) {
-    const i = line.indexOf(':')
-    if (i > 0) result[line.slice(0, i).trim()] = line.slice(i + 1).trim()
-  }
-  return result
 }
 
 function WizardTypeBadge({ type }: { type: string }) {
@@ -741,7 +959,7 @@ function MockWizard({ onDone, setError }: {
       const responseHeaders: Record<string, string> = {}
       if (headersAssetId) {
         const ha = headerAssets.find(a => a.id === headersAssetId)
-        if (ha) Object.assign(responseHeaders, parseKVHeaders(ha.content))
+        if (ha) Object.assign(responseHeaders, parseKV(ha.content))
       }
 
       const body = {
@@ -889,7 +1107,14 @@ function MockWizard({ onDone, setError }: {
                 </FlexBox>
                 <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.25rem', flex: 1, minWidth: '8rem' }}>
                   <Label>Type</Label>
-                  <Select style={{ width: '100%' }} onChange={(e: any) => setAdapterType(e.detail.selectedOption.value)}>
+                  <Select style={{ width: '100%' }} onChange={(e: any) => {
+                    const t = e.detail.selectedOption.value
+                    setAdapterType(t)
+                    const tmpl = ADAPTER_TEMPLATES[t]
+                    if (tmpl) {
+                      setResponseBody(tmpl.body)
+                    }
+                  }}>
                     {ADAPTER_TYPES.filter(t => !t.endsWith('-SENDER')).map(t =>
                       <Option key={t} value={t} selected={t === adapterType}>{t}</Option>)}
                   </Select>
