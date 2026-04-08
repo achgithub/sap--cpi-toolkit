@@ -32,17 +32,35 @@ type ToolTab =
   | 'edi'
   | 'library'
 
-const TABS: { id: ToolTab; label: string; icon: string }[] = [
-  { id: 'xml-formatter',  label: 'XML Formatter',  icon: 'syntax'        },
-  { id: 'json-formatter', label: 'JSON Formatter', icon: 'syntax'        },
-  { id: 'xsd-generator',  label: 'XSD Generator',  icon: 'document-text' },
-  { id: 'converter',      label: 'XML ↔ JSON',     icon: 'transfer'      },
-  { id: 'keygen',         label: 'Key Generation', icon: 'key'           },
-  { id: 'certgen',        label: 'Certificates',   icon: 'certificate'   },
-  { id: 'testdata',       label: 'Test Data',      icon: 'simulate'      },
-  { id: 'groovy',         label: 'Groovy IDE',     icon: 'terminal'      },
-  { id: 'edi',            label: 'EDI Tools',      icon: 'curriculum'    },
-  { id: 'library',       label: 'Script Library', icon: 'library'       },
+const GROUPS: { label: string; icon: string; tabs: { id: ToolTab; label: string; icon: string }[] }[] = [
+  {
+    label: 'Format & Convert',
+    icon:  'syntax',
+    tabs: [
+      { id: 'xml-formatter',  label: 'XML Formatter',  icon: 'syntax'        },
+      { id: 'json-formatter', label: 'JSON Formatter', icon: 'syntax'        },
+      { id: 'converter',      label: 'XML ↔ JSON',     icon: 'transfer'      },
+      { id: 'xsd-generator',  label: 'XSD Generator',  icon: 'document-text' },
+      { id: 'edi',            label: 'EDI Tools',      icon: 'curriculum'    },
+    ],
+  },
+  {
+    label: 'Groovy',
+    icon:  'terminal',
+    tabs: [
+      { id: 'groovy',   label: 'Groovy IDE',     icon: 'terminal' },
+      { id: 'library',  label: 'Script Library', icon: 'library'  },
+    ],
+  },
+  {
+    label: 'Testing',
+    icon:  'simulate',
+    tabs: [
+      { id: 'testdata', label: 'Test Data',      icon: 'simulate'    },
+      { id: 'keygen',   label: 'Key Generation', icon: 'key'         },
+      { id: 'certgen',  label: 'Certificates',   icon: 'certificate' },
+    ],
+  },
 ]
 
 export default function App() {
@@ -71,14 +89,23 @@ export default function App() {
         }}
         style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}
       >
-        {TABS.map((tab) => (
+        {GROUPS.map((group) => (
           <Tab
-            key={tab.id}
-            data-id={tab.id}
-            text={tab.label}
-            icon={tab.icon}
-            selected={activeTab === tab.id}
-          />
+            key={group.label}
+            text={group.label}
+            icon={group.icon}
+            selected={group.tabs.some(t => t.id === activeTab)}
+          >
+            {group.tabs.map((tab) => (
+              <Tab
+                key={tab.id}
+                data-id={tab.id}
+                text={tab.label}
+                icon={tab.icon}
+                selected={activeTab === tab.id}
+              />
+            ))}
+          </Tab>
         ))}
       </TabContainer>
 
