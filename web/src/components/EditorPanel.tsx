@@ -12,7 +12,7 @@ import {
   ToolbarSeparator,
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
-import { SaveToAssetsButton } from '../pages/AssetStore'
+import { SaveToAssetsButton, type AssetContentType } from '../pages/AssetStore'
 
 export interface EditorAction {
   label: string
@@ -41,7 +41,7 @@ interface Props {
   warnings?: string[]
   loading?: boolean
   outputFilename?: string
-  outputContentType?: string  // "xml" | "json" | "edi" | "csv" | "text" — enables Save to Assets
+  outputContentType?: AssetContentType
   children?: React.ReactNode // optional controls above the editors (e.g. direction toggle)
 }
 
