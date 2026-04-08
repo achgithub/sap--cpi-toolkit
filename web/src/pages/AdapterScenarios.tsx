@@ -709,11 +709,6 @@ function MockWizard({ onDone, setError }: {
     if (!adapterName) setAdapterName(a.name)
   }
 
-  const useManual = () => {
-    setSelectedPayload(null)
-    setResponseBody(manualBody)
-  }
-
   const goToConfigure = () => {
     if (!selectedPayload && !manualBody.trim()) return
     if (!selectedPayload) setResponseBody(manualBody)
