@@ -88,6 +88,22 @@ services:
     mem_limit: 64m
     restart: unless-stopped
 
+  # ── Mock HTTP receiver ────────────────────────────────────────────────────
+  # Single container handles all HTTP/SOAP mock adapters via PATH_PREFIX_MODE.
+  # The adapter ID is the first URL path segment: http://localhost:9080/{adapterID}/...
+  mock-http:
+    build:
+      context: ../../adapters/mock-http
+    ports:
+      - "9080:8080"
+    environment:
+      ADAPTER_ID: mock-http
+      CONTROL_PLANE_URL: http://adapter-control:8083
+    depends_on:
+      - adapter-control
+    mem_limit: 32m
+    restart: unless-stopped
+
   # ── Standalone SFTP ───────────────────────────────────────────────────────
   sftp-adapter:
     build:

@@ -5,44 +5,23 @@ import (
 	"time"
 )
 
-// Adapter type constants
+// Adapter type constants — one mock-http container handles both.
 const (
-	TypeREST       = "REST"
-	TypeOData      = "OData"
-	TypeSOAP       = "SOAP"
-	TypeXI         = "XI"
-	TypeAS2        = "AS2"
-	TypeAS4        = "AS4"
-	TypeEDIFACT    = "EDIFACT"
-	TypeRESTSender = "REST-SENDER"
-	TypeSOAPSender = "SOAP-SENDER"
-	TypeXISender   = "XI-SENDER"
+	TypeHTTP = "HTTP"
+	TypeSOAP = "SOAP"
 )
 
 // AllAdapterTypes is the ordered list shown in the UI add-adapter dialog.
-var AllAdapterTypes = []string{
-	TypeREST, TypeOData, TypeSOAP, TypeXI,
-	TypeAS2, TypeAS4, TypeEDIFACT,
-	TypeRESTSender, TypeSOAPSender, TypeXISender,
-}
+var AllAdapterTypes = []string{TypeHTTP, TypeSOAP}
 
 // adapterTypePort maps each adapter type to the Docker-exposed port on localhost.
-// One container per type uses PATH_PREFIX_MODE, so many scenario adapters share one port.
 var adapterTypePort = map[string]int{
-	TypeREST:       9081,
-	TypeOData:      9082,
-	TypeSOAP:       9083,
-	TypeXI:         9084,
-	TypeAS2:        9085,
-	TypeAS4:        9086,
-	TypeEDIFACT:    9087,
-	TypeRESTSender: 9088,
-	TypeSOAPSender: 9088,
-	TypeXISender:   9088,
+	TypeHTTP: 9080,
+	TypeSOAP: 9080,
 }
 
 // IngressURL returns the localhost URL a client would call for this adapter.
-// Adapters run in PATH_PREFIX_MODE so the adapter ID is the first URL segment.
+// The adapter ID is the first URL path segment (PATH_PREFIX_MODE).
 func IngressURL(adapterType, adapterID string) string {
 	port, ok := adapterTypePort[adapterType]
 	if !ok {
@@ -81,35 +60,11 @@ type Credentials struct {
 }
 
 type AdapterConfig struct {
-	// Shared HTTP response fields
 	StatusCode      int               `json:"status_code"`
 	ResponseBody    string            `json:"response_body"`
 	ResponseHeaders map[string]string `json:"response_headers"`
 	ResponseDelayMs int               `json:"response_delay_ms"`
-
-	// SOAP / XI
-	SoapVersion string `json:"soap_version,omitempty"`
-
-	// AS2
-	AS2From string `json:"as2_from,omitempty"`
-	AS2To   string `json:"as2_to,omitempty"`
-
-	// AS4
-	AS4PartyID string `json:"as4_party_id,omitempty"`
-
-	// EDIFACT / X12
-	EDIStandard   string `json:"edi_standard,omitempty"`
-	EDISenderID   string `json:"edi_sender_id,omitempty"`
-	EDIReceiverID string `json:"edi_receiver_id,omitempty"`
-
-	// Sender adapters
-	TargetURL       string            `json:"target_url,omitempty"`
-	Method          string            `json:"method,omitempty"`
-	RequestBody     string            `json:"request_body,omitempty"`
-	RequestHeaders  map[string]string `json:"request_headers,omitempty"`
-	CSRFEnabled     bool              `json:"csrf_enabled,omitempty"`
-	CSRFFetchURL    string            `json:"csrf_fetch_url,omitempty"`
-	CSRFFetchMethod string            `json:"csrf_fetch_method,omitempty"`
+	SoapVersion     string            `json:"soap_version,omitempty"` // "1.1" | "1.2"; empty = plain HTTP
 }
 
 // SFTPConfig is the standalone SFTP server configuration.
@@ -130,12 +85,10 @@ type SFTPFile struct {
 
 // ── CPI Connections ───────────────────────────────────────────────────────────
 
-// CPIConnection stores a named SAP CPI tenant URL with optional basic auth.
-// Multiple connections allow switching between dev, test, and sandbox systems.
 type CPIConnection struct {
 	ID        string    `json:"id"`
-	Name      string    `json:"name"`     // e.g. "CPI Dev"
-	URL       string    `json:"url"`      // e.g. "https://my-tenant.hana.ondemand.com"
+	Name      string    `json:"name"`
+	URL       string    `json:"url"`
 	Username  string    `json:"username,omitempty"`
 	Password  string    `json:"password,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
@@ -157,7 +110,6 @@ type UpdateCPIConnectionRequest struct {
 
 // ── Asset store ───────────────────────────────────────────────────────────────
 
-// Asset is a named payload saved from a tool output for reuse in the mock wizard.
 type Asset struct {
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
@@ -200,8 +152,8 @@ type UpdateAdapterRequest struct {
 	Credentials  *Credentials  `json:"credentials"`
 }
 
-// AdapterPollResponse is returned to HTTP adapter containers that call
-// GET /adapter-config/{id}. Field names match kymaadapterstub adapter expectations.
+// AdapterPollResponse is returned to the mock-http container when it polls
+// GET /adapter-config/{id}.
 type AdapterPollResponse struct {
 	ID              string            `json:"id"`
 	Name            string            `json:"name"`
@@ -211,30 +163,11 @@ type AdapterPollResponse struct {
 	ResponseBody    string            `json:"response_body"`
 	ResponseHeaders map[string]string `json:"response_headers"`
 	ResponseDelayMs int               `json:"response_delay_ms"`
+	SoapVersion     string            `json:"soap_version,omitempty"`
 	Credentials     *Credentials      `json:"credentials"`
-
-	SoapVersion string `json:"soap_version,omitempty"`
-
-	AS2From string `json:"as2_from,omitempty"`
-	AS2To   string `json:"as2_to,omitempty"`
-
-	AS4PartyID string `json:"as4_party_id,omitempty"`
-
-	EDIStandard   string `json:"edi_standard,omitempty"`
-	EDISenderID   string `json:"edi_sender_id,omitempty"`
-	EDIReceiverID string `json:"edi_receiver_id,omitempty"`
-
-	TargetURL       string            `json:"target_url,omitempty"`
-	Method          string            `json:"method,omitempty"`
-	RequestBody     string            `json:"request_body,omitempty"`
-	RequestHeaders  map[string]string `json:"request_headers,omitempty"`
-	CSRFEnabled     bool              `json:"csrf_enabled,omitempty"`
-	CSRFFetchURL    string            `json:"csrf_fetch_url,omitempty"`
-	CSRFFetchMethod string            `json:"csrf_fetch_method,omitempty"`
 }
 
 // SFTPPollResponse is returned when the SFTP adapter polls its config.
-// Field names match the kymaadapterstub SFTP adapter's AdapterConfig struct.
 type SFTPPollResponse struct {
 	ID                    string       `json:"id"`
 	Name                  string       `json:"name"`

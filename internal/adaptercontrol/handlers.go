@@ -226,21 +226,8 @@ func (h *Handler) handleAdapterConfig(w http.ResponseWriter, r *http.Request) {
 		ResponseBody:    a.Config.ResponseBody,
 		ResponseHeaders: a.Config.ResponseHeaders,
 		ResponseDelayMs: a.Config.ResponseDelayMs,
-		Credentials:     a.Credentials,
 		SoapVersion:     a.Config.SoapVersion,
-		AS2From:         a.Config.AS2From,
-		AS2To:           a.Config.AS2To,
-		AS4PartyID:      a.Config.AS4PartyID,
-		EDIStandard:     a.Config.EDIStandard,
-		EDISenderID:     a.Config.EDISenderID,
-		EDIReceiverID:   a.Config.EDIReceiverID,
-		TargetURL:       a.Config.TargetURL,
-		Method:          a.Config.Method,
-		RequestBody:     a.Config.RequestBody,
-		RequestHeaders:  a.Config.RequestHeaders,
-		CSRFEnabled:     a.Config.CSRFEnabled,
-		CSRFFetchURL:    a.Config.CSRFFetchURL,
-		CSRFFetchMethod: a.Config.CSRFFetchMethod,
+		Credentials:     a.Credentials,
 	}
 	writeJSON(w, resp)
 }
