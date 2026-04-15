@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
 import { type SampleInput } from '../data/scriptLibrary'
-import { SaveToAssetsButton } from './AssetStore'
+import { SaveToAssetsButton, LoadFromAssetButton } from './AssetStore'
 import {
   Button,
   Card,
   CardHeader,
   FlexBox,
+  FlexBoxAlignItems,
   FlexBoxDirection,
   Label,
   MessageStrip,
@@ -183,7 +184,11 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
           style={{ flex: 1 }}
         >
           <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
-            <Label style={{ fontWeight: 600 }}>Body</Label>
+            <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+              <Label style={{ fontWeight: 600 }}>Body</Label>
+              <LoadFromAssetButton contentType="xml" onLoad={setBody} />
+              <SaveToAssetsButton content={body} contentType="xml" suggestedName="groovy-body" />
+            </FlexBox>
             <TextArea
               value={body}
               rows={10}
@@ -191,9 +196,13 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
               onInput={(e) => setBody((e.target as unknown as HTMLTextAreaElement).value)}
             />
 
-            <Label style={{ fontWeight: 600 }}>
-              Headers <span style={{ color: 'var(--sapNeutralColor)', fontWeight: 400 }}>(Key: Value, one per line)</span>
-            </Label>
+            <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+              <Label style={{ fontWeight: 600 }}>
+                Headers <span style={{ color: 'var(--sapNeutralColor)', fontWeight: 400 }}>(Key: Value, one per line)</span>
+              </Label>
+              <LoadFromAssetButton contentType="headers" onLoad={setHeadersRaw} />
+              <SaveToAssetsButton content={headersRaw} contentType="headers" />
+            </FlexBox>
             <TextArea
               value={headersRaw}
               rows={4}
@@ -201,11 +210,14 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
               style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
               onInput={(e) => setHeadersRaw((e.target as unknown as HTMLTextAreaElement).value)}
             />
-            <SaveToAssetsButton content={headersRaw} contentType="headers" />
 
-            <Label style={{ fontWeight: 600 }}>
-              Properties <span style={{ color: 'var(--sapNeutralColor)', fontWeight: 400 }}>(Key: Value, one per line)</span>
-            </Label>
+            <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+              <Label style={{ fontWeight: 600 }}>
+                Properties <span style={{ color: 'var(--sapNeutralColor)', fontWeight: 400 }}>(Key: Value, one per line)</span>
+              </Label>
+              <LoadFromAssetButton contentType="properties" onLoad={setPropsRaw} />
+              <SaveToAssetsButton content={propsRaw} contentType="properties" />
+            </FlexBox>
             <TextArea
               value={propsRaw}
               rows={3}
@@ -213,7 +225,6 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
               style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
               onInput={(e) => setPropsRaw((e.target as unknown as HTMLTextAreaElement).value)}
             />
-            <SaveToAssetsButton content={propsRaw} contentType="properties" />
           </FlexBox>
         </Card>
 

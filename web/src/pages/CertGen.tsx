@@ -14,6 +14,7 @@ import {
   Input,
 } from '@ui5/webcomponents-react'
 import { useWorker } from '../hooks/useWorker'
+import { SaveToAssetsButton } from './AssetStore'
 
 interface CertRequest {
   common_name:   string
@@ -36,11 +37,13 @@ function downloadText(content: string, filename: string) {
 }
 
 function KeyOutput({ label, value, filename }: { label: string; value: string; filename: string }) {
+  const suggestedName = filename.replace(/\.[^.]+$/, '')
   return (
     <FlexBox direction={FlexBoxDirection.Column} style={{ flex: 1, gap: '0.25rem' }}>
       <Toolbar style={{ padding: 0 }}>
         <Label style={{ fontWeight: 600 }}>{label}</Label>
         <ToolbarSpacer />
+        <SaveToAssetsButton content={value} contentType="text" suggestedName={suggestedName} />
         <Button design="Transparent" icon="download" onClick={() => downloadText(value, filename)}>
           {filename}
         </Button>

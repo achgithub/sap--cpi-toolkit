@@ -373,34 +373,56 @@ export default function AssetStore() {
                   action={
                     <FlexBox style={{ gap: '0.25rem' }}>
                       <Button design="Transparent" icon="copy" onClick={() => copyToClipboard(a.content)} />
-                      <Button design="Transparent" icon="detail-view"
-                        onClick={() => setPreview(p => p === a.id ? null : a.id)} />
                       <Button design="Transparent" icon="delete" onClick={() => deleteAsset(a.id)} />
                     </FlexBox>
                   }
                 />
               }>
-                <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.5rem', padding: '0.5rem 1rem 1rem' }}>
-                  <Label style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.8rem' }}>
-                    {a.content.length.toLocaleString()} chars
-                  </Label>
-                  {preview === a.id && (
-                    TYPE_META[a.content_type]?.isKV
-                      ? <KVTable content={a.content} />
-                      : (
-                        <pre style={{
-                          margin: 0, padding: '0.5rem',
-                          background: 'var(--sapField_Background)',
-                          border: '1px solid var(--sapField_BorderColor)',
-                          borderRadius: '4px', fontSize: '0.75rem',
-                          maxHeight: '180px', overflow: 'auto',
-                          whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                        }}>
-                          {a.content.slice(0, 2000)}{a.content.length > 2000 ? '\n…' : ''}
-                        </pre>
-                      )
+                <div
+                  style={{ cursor: 'pointer', padding: '0.5rem 1rem 1rem' }}
+                  onClick={() => setPreview(p => p === a.id ? null : a.id)}
+                >
+                  {preview !== a.id ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.78rem' }}>
+                        {a.content.length.toLocaleString()} chars
+                      </span>
+                      <span style={{
+                        fontFamily: 'monospace', fontSize: '0.78rem',
+                        color: 'var(--sapNeutralColor)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        flex: 1,
+                      }}>
+                        {a.content.split('\n')[0].slice(0, 80)}
+                      </span>
+                      <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.75rem' }}>▼</span>
+                    </div>
+                  ) : (
+                    <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.78rem' }}>
+                          {a.content.length.toLocaleString()} chars
+                        </span>
+                        <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.75rem' }}>▲</span>
+                      </div>
+                      {TYPE_META[a.content_type]?.isKV
+                        ? <KVTable content={a.content} />
+                        : (
+                          <pre style={{
+                            margin: 0, padding: '0.5rem',
+                            background: 'var(--sapField_Background)',
+                            border: '1px solid var(--sapField_BorderColor)',
+                            borderRadius: '4px', fontSize: '0.75rem',
+                            maxHeight: '300px', overflow: 'auto',
+                            whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                          }}>
+                            {a.content.slice(0, 4000)}{a.content.length > 4000 ? '\n…' : ''}
+                          </pre>
+                        )
+                      }
+                    </FlexBox>
                   )}
-                </FlexBox>
+                </div>
               </Card>
             ))}
           </div>
