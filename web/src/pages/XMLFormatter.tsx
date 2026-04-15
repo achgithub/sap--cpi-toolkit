@@ -44,6 +44,7 @@ export default function XMLFormatter() {
       ]}
       outputFilename={output ? 'formatted.xml' : undefined}
       outputContentType={output ? 'xml' : undefined}
+      inputContentType="xml"
     />
   )
 }

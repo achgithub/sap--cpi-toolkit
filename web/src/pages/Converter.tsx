@@ -146,6 +146,7 @@ export default function Converter() {
       }
       outputFilename={output ? `converted.${isXMLtoJSON ? 'json' : 'xml'}` : undefined}
       outputContentType={output ? (isXMLtoJSON ? 'json' : 'xml') : undefined}
+      inputContentType={isXMLtoJSON ? 'xml' : 'json'}
     >
       <SegmentedButton
         onSelectionChange={(e) => {

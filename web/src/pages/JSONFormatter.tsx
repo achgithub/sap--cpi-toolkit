@@ -44,6 +44,7 @@ export default function JSONFormatter() {
       ]}
       outputFilename={output ? 'formatted.json' : undefined}
       outputContentType={output ? 'json' : undefined}
+      inputContentType="json"
     />
   )
 }

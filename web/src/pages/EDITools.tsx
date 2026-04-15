@@ -18,7 +18,7 @@ import {
   Option,
 } from '@ui5/webcomponents-react'
 import { useWorker } from '../hooks/useWorker'
-import { SaveToAssetsButton } from './AssetStore'
+import { SaveToAssetsButton, LoadFromAssetButton } from './AssetStore'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -269,6 +269,7 @@ export default function EDITools() {
                 </Button>
                 <Button design="Transparent" onClick={() => { setParseInput(SAMPLE_EDIFACT); setParseResult(null) }}>EDIFACT sample</Button>
                 <Button design="Transparent" onClick={() => { setParseInput(SAMPLE_X12); setParseResult(null) }}>X12 sample</Button>
+                <LoadFromAssetButton contentType="edi" onLoad={(c) => { setParseInput(c); setParseResult(null) }} />
               </Toolbar>
             </FlexBox>
           </Card>
@@ -357,6 +358,7 @@ export default function EDITools() {
               <Button design="Emphasized" disabled={!toXmlInput.trim() || toXmlLoading} onClick={doToXml}>
                 {toXmlLoading ? 'Converting…' : 'Convert to XML'}
               </Button>
+              <LoadFromAssetButton contentType="edi" onLoad={(c) => { setToXmlInput(c); setToXmlResult('') }} />
               {toXmlResult && (
                 <>
                   <Button design="Transparent" icon="download" onClick={() => downloadText(toXmlResult, 'edi_message.xml')}>
@@ -402,6 +404,7 @@ export default function EDITools() {
               <Button design="Emphasized" disabled={!fromXmlInput.trim() || fromXmlLoading} onClick={doFromXml}>
                 {fromXmlLoading ? 'Converting…' : 'Convert to EDI'}
               </Button>
+              <LoadFromAssetButton contentType="xml" onLoad={(c) => { setFromXmlInput(c); setFromXmlResult('') }} />
               {fromXmlResult && (
                 <>
                   <Button design="Transparent" icon="download" onClick={() => downloadText(fromXmlResult, 'message.edi')}>

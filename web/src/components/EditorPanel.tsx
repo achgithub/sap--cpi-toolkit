@@ -12,7 +12,7 @@ import {
   ToolbarSeparator,
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
-import { SaveToAssetsButton, type AssetContentType } from '../pages/AssetStore'
+import { SaveToAssetsButton, LoadFromAssetButton, type AssetContentType } from '../pages/AssetStore'
 
 export interface EditorAction {
   label: string
@@ -42,6 +42,7 @@ interface Props {
   loading?: boolean
   outputFilename?: string
   outputContentType?: AssetContentType
+  inputContentType?: AssetContentType
   children?: React.ReactNode // optional controls above the editors (e.g. direction toggle)
 }
 
@@ -61,6 +62,7 @@ export default function EditorPanel({
   loading = false,
   outputFilename,
   outputContentType,
+  inputContentType,
   children,
 }: Props) {
   const handleDownload = () => {
@@ -120,6 +122,13 @@ export default function EditorPanel({
                   {s.label}
                 </Button>
               ))}
+            </>
+          )}
+
+          {inputContentType && (
+            <>
+              <ToolbarSeparator />
+              <LoadFromAssetButton contentType={inputContentType} onLoad={onInputChange} />
             </>
           )}
 

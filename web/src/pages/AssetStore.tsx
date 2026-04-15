@@ -153,6 +153,85 @@ export function SaveToAssetsButton({ content, contentType, suggestedName = '' }:
   )
 }
 
+// ── LoadFromAssetButton ───────────────────────────────────────────────────────
+
+interface LoadButtonProps {
+  contentType: AssetContentType
+  onLoad: (content: string) => void
+}
+
+export function LoadFromAssetButton({ contentType, onLoad }: LoadButtonProps) {
+  const [open,    setOpen]    = useState(false)
+  const [assets,  setAssets]  = useState<Asset[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+
+  const openPicker = async () => {
+    if (open) { setOpen(false); return }
+    setLoading(true); setError('')
+    try {
+      const res = await fetch(API)
+      if (!res.ok) throw new Error(res.statusText)
+      const data: Asset[] = await res.json()
+      setAssets((data ?? [])
+        .filter(a => a.content_type === contentType)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()))
+    } catch (e: any) { setError(e.message) }
+    finally { setLoading(false) }
+    setOpen(true)
+  }
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <Button design="Transparent" icon="open-folder" onClick={openPicker} disabled={loading}>
+        {loading ? 'Loading…' : 'Load from Asset'}
+      </Button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, zIndex: 200,
+          background: 'var(--sapList_Background)',
+          border: '1px solid var(--sapList_BorderColor)',
+          borderRadius: '0.25rem',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          minWidth: '220px', maxHeight: '240px', overflowY: 'auto',
+        }}>
+          {error && (
+            <div style={{ padding: '0.5rem 0.75rem', color: 'var(--sapErrorColor)', fontSize: '0.82rem' }}>{error}</div>
+          )}
+          {!error && assets.length === 0 && (
+            <div style={{ padding: '0.5rem 0.75rem', color: 'var(--sapContent_LabelColor)', fontSize: '0.82rem' }}>
+              No {TYPE_META[contentType]?.label ?? contentType} assets saved yet
+            </div>
+          )}
+          {assets.map(a => (
+            <div
+              key={a.id}
+              style={{
+                padding: '0.4rem 0.75rem', cursor: 'pointer', fontSize: '0.85rem',
+                borderBottom: '1px solid var(--sapList_BorderColor)',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--sapList_Hover_Background)')}
+              onMouseLeave={e => (e.currentTarget.style.background = '')}
+              onClick={() => { onLoad(a.content); setOpen(false) }}
+            >
+              {a.name}
+            </div>
+          ))}
+          <div
+            style={{
+              padding: '0.3rem 0.75rem', cursor: 'pointer', fontSize: '0.78rem',
+              color: 'var(--sapContent_LabelColor)', borderTop: '1px solid var(--sapList_BorderColor)',
+            }}
+            onClick={() => setOpen(false)}
+          >
+            ✕ Close
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function AssetStore() {

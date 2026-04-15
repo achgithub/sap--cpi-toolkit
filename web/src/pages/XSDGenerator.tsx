@@ -89,6 +89,8 @@ export default function XSDGenerator() {
         { label: 'Despatch Advice', content: SAMPLE_DESADV },
       ]}
       outputFilename={output ? 'schema.xsd' : undefined}
+      outputContentType={output ? 'xml' : undefined}
+      inputContentType="xml"
     />
   )
 }

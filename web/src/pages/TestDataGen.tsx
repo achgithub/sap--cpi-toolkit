@@ -17,7 +17,7 @@ import {
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
 import { useWorker } from '../hooks/useWorker'
-import { SaveToAssetsButton } from './AssetStore'
+import { SaveToAssetsButton, LoadFromAssetButton } from './AssetStore'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -584,6 +584,9 @@ export default function TestDataGen() {
             </SegmentedButton>
           </FlexBox>
 
+          <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+            <LoadFromAssetButton contentType="xml" onLoad={(c) => { setContent(c); setFields([]) }} />
+          </FlexBox>
           <TextArea
             value={content}
             rows={12}

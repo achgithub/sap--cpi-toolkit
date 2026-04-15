@@ -74,6 +74,14 @@ interface HttpResponse {
   durationMs: number
 }
 
+interface Asset {
+  id: string
+  name: string
+  content: string
+  content_type: string
+  created_at: string
+}
+
 // ── API helpers ────────────────────────────────────────────────────────────────
 
 const WORKER_API  = '/api/worker'
@@ -185,6 +193,10 @@ function TestTool() {
   const [newColName,     setNewColName]     = useState('')
   const [saving,         setSaving]         = useState(false)
   const [collErr,        setCollErr]        = useState('')
+
+  const [showBodyAssetPicker, setShowBodyAssetPicker] = useState(false)
+  const [showBodyAssetSave,   setShowBodyAssetSave]   = useState(false)
+  const [showRespAssetSave,   setShowRespAssetSave]   = useState(false)
 
   const loadCollections = useCallback(async () => {
     try {
@@ -405,7 +417,30 @@ function TestTool() {
           <div style={{ padding: '0.75rem' }}>
             <HeadersEditor headers={headers} onChange={setHeaders} />
             <div style={{ marginTop: '0.5rem' }}>
-              <Label>Body</Label>
+              <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}>
+                <Label>Body</Label>
+                <FlexBox style={{ gap: '0.25rem' }}>
+                  <Button design="Transparent" onClick={() => { setShowBodyAssetPicker(v => !v); setShowBodyAssetSave(false) }}>
+                    Load from Asset
+                  </Button>
+                  <Button design="Transparent" onClick={() => { setShowBodyAssetSave(v => !v); setShowBodyAssetPicker(false) }}>
+                    Save as Asset
+                  </Button>
+                </FlexBox>
+              </FlexBox>
+              {showBodyAssetPicker && (
+                <AssetPickerPanel
+                  onSelect={(a) => { setBody(a.content); setShowBodyAssetPicker(false) }}
+                  onClose={() => setShowBodyAssetPicker(false)}
+                />
+              )}
+              {showBodyAssetSave && (
+                <SaveAssetPanel
+                  content={body}
+                  onSaved={() => setShowBodyAssetSave(false)}
+                  onClose={() => setShowBodyAssetSave(false)}
+                />
+              )}
               <TextArea value={body} rows={6} style={{ width: '100%', fontFamily: 'monospace' }}
                 onInput={(e) => setBody((e.target as any).value)} />
             </div>
@@ -432,7 +467,19 @@ function TestTool() {
                 </div>
               </div>
               <div>
-                <Label>Body</Label>
+                <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}>
+                  <Label>Body</Label>
+                  <Button design="Transparent" onClick={() => setShowRespAssetSave(v => !v)}>
+                    Save as Asset
+                  </Button>
+                </FlexBox>
+                {showRespAssetSave && (
+                  <SaveAssetPanel
+                    content={response.body}
+                    onSaved={() => setShowRespAssetSave(false)}
+                    onClose={() => setShowRespAssetSave(false)}
+                  />
+                )}
                 <pre style={{ fontFamily: 'monospace', fontSize: '0.82rem', whiteSpace: 'pre-wrap',
                   background: 'var(--sapList_Background)', padding: '0.75rem', borderRadius: '4px',
                   margin: 0, overflow: 'auto', maxHeight: '300px' }}>
@@ -490,12 +537,14 @@ function MockReceiver() {
   const [scenarios,     setScenarios]     = useState<Scenario[]>([])
   const [loading,       setLoading]       = useState(true)
   const [error,         setError]         = useState('')
-  const [showAddScene,  setShowAddScene]  = useState(false)
-  const [showAddMock,   setShowAddMock]   = useState<string | null>(null) // scenarioID
-  const [sceneName,     setSceneName]     = useState('')
-  const [mockForm,      setMockForm]      = useState(defaultMockForm())
-  const [saving,        setSaving]        = useState(false)
-  const [saveErr,       setSaveErr]       = useState('')
+  const [showAddScene,        setShowAddScene]        = useState(false)
+  const [showAddMock,         setShowAddMock]         = useState<string | null>(null) // scenarioID
+  const [editingAdapterID,    setEditingAdapterID]    = useState<string | null>(null)
+  const [showMockAssetPicker, setShowMockAssetPicker] = useState(false)
+  const [sceneName,           setSceneName]           = useState('')
+  const [mockForm,            setMockForm]            = useState(defaultMockForm())
+  const [saving,              setSaving]              = useState(false)
+  const [saveErr,             setSaveErr]             = useState('')
 
   function defaultMockForm() {
     return { name: '', slug: '', type: 'HTTP', behavior_mode: 'success',
@@ -562,6 +611,53 @@ function MockReceiver() {
     finally { setSaving(false) }
   }
 
+  const startEdit = (scenarioID: string, adapter: Adapter) => {
+    setShowAddMock(scenarioID)
+    setEditingAdapterID(adapter.id)
+    setShowMockAssetPicker(false)
+    setSaveErr('')
+    setMockForm({
+      name:          adapter.name,
+      slug:          adapter.id,
+      type:          adapter.type,
+      behavior_mode: adapter.behavior_mode,
+      status_code:   String(adapter.config.status_code),
+      response_body: adapter.config.response_body,
+      soap_version:  adapter.config.soap_version ?? '',
+      delay_ms:      String(adapter.config.response_delay_ms),
+    })
+  }
+
+  const updateMock = async (scenarioID: string) => {
+    if (!editingAdapterID) return
+    if (!mockForm.name.trim()) { setSaveErr('Name is required'); return }
+    setSaving(true); setSaveErr('')
+    try {
+      const sc = parseInt(mockForm.status_code) || 200
+      const dm = parseInt(mockForm.delay_ms) || 0
+      const payload: Record<string, unknown> = {
+        name: mockForm.name,
+        type: mockForm.type,
+        behavior_mode: mockForm.behavior_mode,
+        config: {
+          status_code: sc,
+          response_body: mockForm.response_body,
+          response_headers: {},
+          response_delay_ms: dm,
+          soap_version: mockForm.soap_version || undefined,
+        },
+      }
+      await adapterFetch(`/scenarios/${scenarioID}/adapters/${editingAdapterID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      setMockForm(defaultMockForm()); setShowAddMock(null); setEditingAdapterID(null)
+      load()
+    } catch (e: unknown) { setSaveErr(e instanceof Error ? e.message : String(e)) }
+    finally { setSaving(false) }
+  }
+
   const deleteMock = async (scenarioID: string, adapterID: string) => {
     await adapterFetch(`/scenarios/${scenarioID}/adapters/${adapterID}`, { method: 'DELETE' })
     load()
@@ -620,7 +716,7 @@ function MockReceiver() {
               subtitleText={scenario.description}
               action={
                 <FlexBox style={{ gap: '0.4rem' }}>
-                  <Button onClick={() => { setShowAddMock(scenario.id); setMockForm(defaultMockForm()); setSaveErr('') }}>
+                  <Button onClick={() => { setShowAddMock(scenario.id); setEditingAdapterID(null); setMockForm(defaultMockForm()); setShowMockAssetPicker(false); setSaveErr('') }}>
                     Add Mock
                   </Button>
                   <Button design="Negative" onClick={() => deleteScenario(scenario.id)}>Delete</Button>
@@ -629,15 +725,18 @@ function MockReceiver() {
             />
           }>
 
-          {/* Add mock form */}
+          {/* Add / Edit mock form */}
           {showAddMock === scenario.id && (
             <div style={{ padding: '0.75rem', borderBottom: '1px solid var(--sapList_BorderColor)',
               display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <Label style={{ fontWeight: 600 }}>{editingAdapterID ? 'Edit Mock Endpoint' : 'New Mock Endpoint'}</Label>
               <FlexBox style={{ gap: '0.5rem', flexWrap: 'wrap' }} alignItems={FlexBoxAlignItems.Center}>
                 <Input value={mockForm.name} placeholder="Display name" style={{ width: '180px' }}
                   onInput={(e) => setMockForm(f => ({ ...f, name: (e.target as any).value }))} />
-                <Input value={mockForm.slug} placeholder="URL slug (optional)" style={{ width: '160px' }}
-                  onInput={(e) => setMockForm(f => ({ ...f, slug: (e.target as any).value }))} />
+                {!editingAdapterID && (
+                  <Input value={mockForm.slug} placeholder="URL slug (optional)" style={{ width: '160px' }}
+                    onInput={(e) => setMockForm(f => ({ ...f, slug: (e.target as any).value }))} />
+                )}
                 <Select style={{ width: '120px' }}
                   onChange={(e) => setMockForm(f => ({ ...f, type: (e.detail.selectedOption as HTMLElement).dataset.value ?? 'HTTP' }))}>
                   <Option data-value="HTTP"  selected={mockForm.type === 'HTTP'}>HTTP</Option>
@@ -664,15 +763,28 @@ function MockReceiver() {
                 </FlexBox>
               )}
               <div>
-                <Label>Response body</Label>
+                <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}>
+                  <Label>Response body</Label>
+                  <Button design="Transparent" onClick={() => setShowMockAssetPicker(v => !v)}>
+                    Load from Asset
+                  </Button>
+                </FlexBox>
+                {showMockAssetPicker && (
+                  <AssetPickerPanel
+                    onSelect={(a) => { setMockForm(f => ({ ...f, response_body: a.content })); setShowMockAssetPicker(false) }}
+                    onClose={() => setShowMockAssetPicker(false)}
+                  />
+                )}
                 <TextArea value={mockForm.response_body} rows={4} style={{ width: '100%', fontFamily: 'monospace' }}
                   onInput={(e) => setMockForm(f => ({ ...f, response_body: (e.target as any).value }))} />
               </div>
               <FlexBox style={{ gap: '0.5rem' }}>
-                <Button design="Emphasized" onClick={() => createMock(scenario.id)} disabled={saving}>
-                  {saving ? 'Creating…' : 'Create'}
+                <Button design="Emphasized"
+                  onClick={() => editingAdapterID ? updateMock(scenario.id) : createMock(scenario.id)}
+                  disabled={saving}>
+                  {saving ? 'Saving…' : editingAdapterID ? 'Update' : 'Create'}
                 </Button>
-                <Button onClick={() => setShowAddMock(null)}>Cancel</Button>
+                <Button onClick={() => { setShowAddMock(null); setEditingAdapterID(null) }}>Cancel</Button>
               </FlexBox>
               {saveErr && <MessageStrip design="Negative">{saveErr}</MessageStrip>}
             </div>
@@ -710,8 +822,12 @@ function MockReceiver() {
                       {a.last_activity ? new Date(a.last_activity).toLocaleTimeString() : '—'}
                     </td>
                     <td style={{ padding: '0.4rem 0.6rem' }}>
-                      <Button icon="delete" design="Transparent"
-                        onClick={() => deleteMock(scenario.id, a.id)} />
+                      <FlexBox style={{ gap: '0.25rem' }}>
+                        <Button icon="edit" design="Transparent"
+                          onClick={() => startEdit(scenario.id, a)} />
+                        <Button icon="delete" design="Transparent"
+                          onClick={() => deleteMock(scenario.id, a.id)} />
+                      </FlexBox>
                     </td>
                   </tr>
                 ))}
@@ -722,6 +838,119 @@ function MockReceiver() {
       ))}
     </FlexBox>
   )
+}
+
+// ── Asset picker panel ─────────────────────────────────────────────────────────
+
+function AssetPickerPanel({ onSelect, onClose }: {
+  onSelect: (a: Asset) => void
+  onClose: () => void
+}) {
+  const [assets,  setAssets]  = useState<Asset[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filter,  setFilter]  = useState('')
+
+  useEffect(() => {
+    adapterFetch('/assets')
+      .then((data: Asset[]) => setAssets(data))
+      .catch(() => setAssets([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const visible = assets.filter(a =>
+    a.name.toLowerCase().includes(filter.toLowerCase()) ||
+    a.content_type.toLowerCase().includes(filter.toLowerCase())
+  )
+
+  return (
+    <div style={{ border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
+      background: 'var(--sapList_Background)', padding: '0.5rem', marginBottom: '0.4rem' }}>
+      <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}
+        style={{ marginBottom: '0.4rem' }}>
+        <Input placeholder="Filter assets…" value={filter} style={{ flex: 1, marginRight: '0.4rem' }}
+          onInput={(e) => setFilter((e.target as any).value)} />
+        <Button design="Transparent" icon="decline" onClick={onClose} />
+      </FlexBox>
+      {loading && <p style={{ margin: 0, fontSize: '0.8rem' }}>Loading…</p>}
+      {!loading && visible.length === 0 && (
+        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)' }}>
+          No assets found. Save content as an asset from another tool first.
+        </p>
+      )}
+      <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+        {visible.map(a => (
+          <FlexBox key={a.id} alignItems={FlexBoxAlignItems.Center}
+            justifyContent={FlexBoxJustifyContent.SpaceBetween}
+            style={{ padding: '0.3rem 0.4rem', cursor: 'pointer', borderRadius: '3px',
+              background: 'var(--sapList_Background)' }}
+            onClick={() => onSelect(a)}>
+            <span style={{ fontSize: '0.82rem' }}>{a.name}</span>
+            <span style={{ fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)',
+              background: 'var(--sapHighlightColor)', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>
+              {a.content_type}
+            </span>
+          </FlexBox>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Save asset panel ───────────────────────────────────────────────────────────
+
+function SaveAssetPanel({ content, onSaved, onClose }: {
+  content: string
+  onSaved: () => void
+  onClose: () => void
+}) {
+  const [name,        setName]        = useState('')
+  const [contentType, setContentType] = useState(detectContentType(content))
+  const [saving,      setSaving]      = useState(false)
+  const [error,       setError]       = useState('')
+
+  const save = async () => {
+    if (!name.trim()) { setError('Name is required'); return }
+    setSaving(true); setError('')
+    try {
+      await adapterFetch('/assets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), content, content_type: contentType }),
+      })
+      onSaved()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div style={{ border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
+      background: 'var(--sapList_Background)', padding: '0.5rem', marginBottom: '0.4rem',
+      display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+      <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
+        <Input placeholder="Asset name" value={name} style={{ flex: 1, minWidth: '160px' }}
+          onInput={(e) => setName((e.target as any).value)} />
+        <Select style={{ width: '100px' }}
+          onChange={(e) => setContentType((e.detail.selectedOption as HTMLElement).dataset.value ?? 'text')}>
+          {['xml', 'json', 'text', 'edi', 'csv'].map(t => (
+            <Option key={t} data-value={t} selected={contentType === t}>{t}</Option>
+          ))}
+        </Select>
+        <Button design="Emphasized" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+        <Button design="Transparent" onClick={onClose}>Cancel</Button>
+      </FlexBox>
+      {error && <MessageStrip design="Negative">{error}</MessageStrip>}
+    </div>
+  )
+}
+
+function detectContentType(content: string): string {
+  const trimmed = content.trimStart()
+  if (trimmed.startsWith('<'))  return 'xml'
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'json'
+  return 'text'
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
