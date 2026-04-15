@@ -18,7 +18,6 @@ import TestDataGen from './pages/TestDataGen'
 import GroovyIDE from './pages/GroovyIDE'
 import EDITools from './pages/EDITools'
 import ScriptLibrary from './pages/ScriptLibrary'
-import AdapterScenarios from './pages/AdapterScenarios'
 import SFTPServer from './pages/SFTPServer'
 import AssetStore from './pages/AssetStore'
 import { type SampleInput } from './data/scriptLibrary'
@@ -34,7 +33,6 @@ type ToolTab =
   | 'groovy'
   | 'edi'
   | 'library'
-  | 'adapter-scenarios'
   | 'sftp'
   | 'assets'
 
@@ -59,11 +57,10 @@ const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
   {
     label: 'Testing',
     tabs: [
-      { id: 'testdata',          label: 'Test Data'      },
-      { id: 'keygen',            label: 'Key Generation' },
-      { id: 'certgen',           label: 'Certificates'   },
-      { id: 'adapter-scenarios', label: 'Mock Adapters'  },
-      { id: 'sftp',              label: 'SFTP Server'    },
+      { id: 'testdata', label: 'Test Data'      },
+      { id: 'keygen',   label: 'Key Generation' },
+      { id: 'certgen',  label: 'Certificates'   },
+      { id: 'sftp',     label: 'SFTP Server'    },
       { id: 'assets',            label: 'Asset Store'    },
     ],
   },
@@ -122,8 +119,7 @@ export default function App() {
         {activeTab === 'groovy'         && <GroovyIDE inject={ideInject} />}
         {activeTab === 'edi'                && <EDITools />}
         {activeTab === 'library'            && <ScriptLibrary onLoadInIDE={loadInIDE} />}
-        {activeTab === 'adapter-scenarios'  && <AdapterScenarios />}
-        {activeTab === 'sftp'               && <SFTPServer />}
+        {activeTab === 'sftp'    && <SFTPServer />}
         {activeTab === 'assets'             && <AssetStore />}
       </div>
     </FlexBox>
