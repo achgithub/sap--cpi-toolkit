@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -195,7 +198,21 @@ func main() {
 	}
 	log.Printf("SSH host key fingerprint: %s", ssh.FingerprintSHA256(hostKey.PublicKey()))
 
+	// Also generate/load RSA and ECDSA keys as fallbacks for client compatibility
+	rsakeyPath := strings.TrimSuffix(hostKeyPath, ".key") + "_rsa.key"
+	rsaKey, err := loadOrGenerateRSAKey(rsakeyPath)
+	if err != nil {
+		log.Printf("Warning: failed to load RSA host key: %v", err)
+	}
+
+	ecdsaskeyPath := strings.TrimSuffix(hostKeyPath, ".key") + "_ecdsa.key"
+	ecdsaKey, err := loadOrGenerateECDSAKey(ecdsaskeyPath)
+	if err != nil {
+		log.Printf("Warning: failed to load ECDSA host key: %v", err)
+	}
+
 	sshConfig := &ssh.ServerConfig{
+		MaxAuthTries: 20,
 		PasswordCallback: func(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			cfg, err := fetchConfig(adapterID, controlPlaneURL)
 			if err != nil {
@@ -212,6 +229,12 @@ func main() {
 		},
 	}
 	sshConfig.AddHostKey(hostKey)
+	if ecdsaKey != nil {
+		sshConfig.AddHostKey(ecdsaKey)
+	}
+	if rsaKey != nil {
+		sshConfig.AddHostKey(rsaKey)
+	}
 
 	listener, err := net.Listen("tcp", ":22")
 	if err != nil {
@@ -348,24 +371,29 @@ func fetchConfig(adapterID, controlPlaneURL string) (*AdapterConfig, error) {
 //  2. Key persisted on disk at keyPath (stable across restarts)
 //  3. Generate a new key and persist it to keyPath for next time
 func loadOrGenerateHostKey(keyPEM, keyPath string) (ssh.Signer, error) {
+	log.Printf("[DEBUG] loadOrGenerateHostKey: keyPEM=%q keyPath=%s", keyPEM, keyPath)
 	if keyPEM != "" {
+		log.Printf("[DEBUG] Loading key from PEM (config)")
 		return signerFromPEM([]byte(keyPEM))
 	}
 
 	if keyPath != "" {
 		if data, err := os.ReadFile(keyPath); err == nil {
+			log.Printf("[DEBUG] Found persisted key at %s", keyPath)
 			signer, err := signerFromPEM(data)
 			if err == nil {
 				return signer, nil
 			}
 			log.Printf("Warning: persisted host key at %s is invalid (%v) — regenerating", keyPath, err)
+		} else {
+			log.Printf("[DEBUG] No persisted key at %s: %v", keyPath, err)
 		}
 	}
 
-	log.Printf("Generating new SSH host key")
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	log.Printf("[DEBUG] Generating new SSH host key (ed25519) with keyPath=%s", keyPath)
+	_, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate RSA key: %w", err)
+		return nil, fmt.Errorf("failed to generate ed25519 key: %w", err)
 	}
 
 	// Persist so the fingerprint survives restarts.
@@ -385,20 +413,116 @@ func signerFromPEM(data []byte) (ssh.Signer, error) {
 	if block == nil {
 		return nil, fmt.Errorf("failed to decode PEM block")
 	}
-	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %w", err)
+
+	var privateKey interface{}
+	var err error
+
+	// Try PKCS8 first (ed25519, new format)
+	if block.Type == "PRIVATE KEY" {
+		privateKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err == nil {
+			return ssh.NewSignerFromKey(privateKey)
+		}
 	}
+
+	// Fall back to PKCS1 for old RSA keys
+	if block.Type == "RSA PRIVATE KEY" {
+		rsakey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err == nil {
+			return ssh.NewSignerFromKey(rsakey)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to parse private key (type: %s)", block.Type)
+}
+
+func persistHostKey(key interface{}, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	pkcs8, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return fmt.Errorf("failed to marshal key: %w", err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: pkcs8,
+	})
+	return os.WriteFile(path, pemBytes, 0600)
+}
+
+func loadOrGenerateRSAKey(keyPath string) (ssh.Signer, error) {
+	if keyPath != "" {
+		if data, err := os.ReadFile(keyPath); err == nil {
+			signer, err := signerFromPEM(data)
+			if err == nil {
+				return signer, nil
+			}
+		}
+	}
+
+	log.Printf("[DEBUG] Generating new RSA host key")
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate RSA key: %w", err)
+	}
+
+	if keyPath != "" {
+		if err := persistRSAHostKey(privateKey, keyPath); err != nil {
+			log.Printf("Warning: could not persist RSA host key: %v", err)
+		}
+	}
+
 	return ssh.NewSignerFromKey(privateKey)
 }
 
-func persistHostKey(key *rsa.PrivateKey, path string) error {
+func persistRSAHostKey(key *rsa.PrivateKey, path string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
 	pemBytes := pem.EncodeToMemory(&pem.Block{
 		Type:  "RSA PRIVATE KEY",
 		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	return os.WriteFile(path, pemBytes, 0600)
+}
+
+func loadOrGenerateECDSAKey(keyPath string) (ssh.Signer, error) {
+	if keyPath != "" {
+		if data, err := os.ReadFile(keyPath); err == nil {
+			signer, err := signerFromPEM(data)
+			if err == nil {
+				return signer, nil
+			}
+		}
+	}
+
+	log.Printf("[DEBUG] Generating new ECDSA host key")
+	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate ECDSA key: %w", err)
+	}
+
+	if keyPath != "" {
+		if err := persistECDSAHostKey(privateKey, keyPath); err != nil {
+			log.Printf("Warning: could not persist ECDSA host key: %v", err)
+		}
+	}
+
+	return ssh.NewSignerFromKey(privateKey)
+}
+
+func persistECDSAHostKey(key *ecdsa.PrivateKey, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	pkcs8, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return fmt.Errorf("failed to marshal ECDSA key: %w", err)
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: pkcs8,
 	})
 	return os.WriteFile(path, pemBytes, 0600)
 }
