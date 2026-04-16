@@ -31,7 +31,9 @@ interface SFTPEntry {
   type: 'file' | 'dir'
   size: number
   mod_time: string
+  permissions: number  // Unix mode bits, e.g. 0o644 = 420
 }
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -35,6 +35,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/sftp/mkdir", h.handleSFTPMkdir)
 	mux.HandleFunc("/sftp/upload", h.handleSFTPUpload)
 	mux.HandleFunc("/sftp/move", h.handleSFTPMove)
+	mux.HandleFunc("/sftp/chmod", h.handleSFTPChmod)
 	mux.HandleFunc("/system/log", h.handleSystemLog)
 	mux.HandleFunc("/assets", h.handleAssets)
 	mux.HandleFunc("/assets/", h.handleAssetDetail)
@@ -460,11 +461,12 @@ func (h *Handler) handleSFTPFiles(w http.ResponseWriter, r *http.Request) {
 				t = "dir"
 			}
 			result = append(result, SFTPEntry{
-				Name:    e.Name(),
-				Path:    entryPath,
-				Type:    t,
-				Size:    info.Size(),
-				ModTime: info.ModTime().Format(time.RFC3339),
+				Name:        e.Name(),
+				Path:        entryPath,
+				Type:        t,
+				Size:        info.Size(),
+				ModTime:     info.ModTime().Format(time.RFC3339),
+				Permissions: uint32(info.Mode().Perm()),
 			})
 		}
 		writeJSON(w, result)
@@ -567,6 +569,31 @@ func (h *Handler) handleSFTPMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := os.Rename(fromReal, toReal); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSFTPChmod sets the permissions on a file or directory within the SFTP root.
+func (h *Handler) handleSFTPChmod(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Path string `json:"path"`
+		Mode uint32 `json:"mode"` // Unix permission bits, e.g. 420 (= 0644)
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	real, err := h.sftpRealPath(req.Path)
+	if err != nil {
+		jsonError(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	if err := os.Chmod(real, os.FileMode(req.Mode)); err != nil {
 		jsonError(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

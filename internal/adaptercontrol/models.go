@@ -85,11 +85,12 @@ type SFTPFile struct {
 
 // SFTPEntry is one item returned by the file-browser API.
 type SFTPEntry struct {
-	Name    string `json:"name"`
-	Path    string `json:"path"`    // absolute within SFTP root, e.g. "/inbound/orders.xml"
-	Type    string `json:"type"`    // "file" | "dir"
-	Size    int64  `json:"size"`
-	ModTime string `json:"mod_time"` // RFC3339
+	Name        string `json:"name"`
+	Path        string `json:"path"`        // absolute within SFTP root, e.g. "/inbound/orders.xml"
+	Type        string `json:"type"`        // "file" | "dir"
+	Size        int64  `json:"size"`
+	ModTime     string `json:"mod_time"`    // RFC3339
+	Permissions uint32 `json:"permissions"` // Unix file mode bits, e.g. 0644
 }
 
 // ── CPI Connections ───────────────────────────────────────────────────────────
