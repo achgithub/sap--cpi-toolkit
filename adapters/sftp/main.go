@@ -192,11 +192,23 @@ func main() {
 		config = &AdapterConfig{}
 	}
 
+	// Sanity check: warn if credentials are not configured.
+	if config.Credentials == nil || config.Credentials.Username == "" {
+		log.Printf("WARNING: SFTP credentials are not configured — all password auth attempts will fail")
+	}
+
 	hostKey, err := loadOrGenerateHostKey(config.SSHHostKey, hostKeyPath)
 	if err != nil {
 		log.Fatalf("Failed to load host key: %v", err)
 	}
-	log.Printf("SSH host key fingerprint: %s", ssh.FingerprintSHA256(hostKey.PublicKey()))
+	fingerprint := ssh.FingerprintSHA256(hostKey.PublicKey())
+	log.Printf("SSH host key fingerprint: %s", fingerprint)
+
+	// Sync the active host key and fingerprint back to the control plane so the
+	// UI always shows the correct value (important after DB resets or key rotation).
+	if config.SSHHostKeyFingerprint != fingerprint {
+		go syncHostKeyToControlPlane(hostKeyPath, fingerprint, controlPlaneURL)
+	}
 
 	// Also generate/load RSA and ECDSA keys as fallbacks for client compatibility
 	rsakeyPath := strings.TrimSuffix(hostKeyPath, ".key") + "_rsa.key"
@@ -525,4 +537,44 @@ func persistECDSAHostKey(key *ecdsa.PrivateKey, path string) error {
 		Bytes: pkcs8,
 	})
 	return os.WriteFile(path, pemBytes, 0600)
+}
+
+// syncHostKeyToControlPlane reads the persisted primary host key from disk and
+// pushes the PEM + fingerprint to the control plane so the UI stays in sync.
+// Called in a goroutine after startup — non-fatal if it fails.
+func syncHostKeyToControlPlane(hostKeyPath, fingerprint, controlPlaneURL string) {
+	keyPEM, err := os.ReadFile(hostKeyPath)
+	if err != nil {
+		log.Printf("Warning: could not read host key for sync: %v", err)
+		return
+	}
+
+	// GET current full config so we only overwrite the key fields.
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("%s/sftp", controlPlaneURL))
+	if err != nil {
+		log.Printf("Warning: could not fetch SFTP config for key sync: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var cfg map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		log.Printf("Warning: could not decode SFTP config for key sync: %v", err)
+		return
+	}
+
+	cfg["ssh_host_key"] = string(keyPEM)
+	cfg["ssh_host_key_fingerprint"] = fingerprint
+
+	body, _ := json.Marshal(cfg)
+	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf("%s/sftp", controlPlaneURL), strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	putResp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Warning: could not sync host key to control plane: %v", err)
+		return
+	}
+	putResp.Body.Close()
+	log.Printf("Host key fingerprint synced to control plane: %s", fingerprint)
 }
