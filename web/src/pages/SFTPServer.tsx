@@ -344,6 +344,7 @@ export default function SFTPServer() {
 
   // ── File browser state ───────────────────────────────────────────────────────
   const [currentPath,    setCurrentPath]    = useState('/')
+  const [selectedPath,   setSelectedPath]   = useState<string | null>(null)
   const [items,          setItems]          = useState<SFTPEntry[]>([])
   const [loading,        setLoading]        = useState(false)
   // dropTarget: null = no drag, 'bg' = hovering background, path = hovering a folder/breadcrumb target
@@ -435,10 +436,14 @@ export default function SFTPServer() {
 
   const navigate = (path: string) => {
     setCurrentPath(path)
+    setSelectedPath(null)
     setShowNewFile(false)
     setShowNewFolder(false)
     setNewFileName(''); setNewFileContent(''); setNewFolderName('')
   }
+
+  const toWindowsPath = (p: string) =>
+    (p === '/' ? '\\' : p.replace(/\//g, '\\'))
 
   const uploadFilesTo = async (fileList: File[], targetPath: string) => {
     const fd = new FormData()
@@ -622,6 +627,23 @@ export default function SFTPServer() {
       {/* ── File System ─────────────────────────────────────────────────────── */}
       <Card>
         {/* ── Navigation bar ─────────────────────────────────────────────── */}
+        {/* Path bar — shows selected item or current directory in CPI-friendly backslash format */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.5rem',
+          padding: '0 1rem', height: '2.25rem',
+          borderBottom: '1px solid var(--sapList_BorderColor)',
+          background: 'var(--sapField_Background)',
+        }}>
+          <Icon name="navigation-right-arrow" style={{ fontSize: '0.7rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }} />
+          <span style={{
+            fontFamily: 'monospace', fontSize: '0.8rem',
+            color: selectedPath ? 'var(--sapTextColor)' : 'var(--sapContent_LabelColor)',
+            letterSpacing: '0.01em', userSelect: 'all', flex: 1,
+          }}>
+            {toWindowsPath(selectedPath ?? currentPath)}
+          </span>
+        </div>
+
         <div style={{
           display: 'flex', alignItems: 'center', gap: '0.25rem',
           padding: '0 1rem', height: '3rem',
@@ -785,7 +807,7 @@ export default function SFTPServer() {
                 onDragOver={e => { e.preventDefault(); e.stopPropagation(); setDropTarget(dir.path) }}
                 onDragLeave={e => { e.stopPropagation(); setDropTarget(t => t === dir.path ? 'bg' : t) }}
                 onDrop={e => handleFolderDrop(e, dir)}
-                onClick={() => navigate(dir.path)}
+                onClick={() => { setSelectedPath(dir.path); navigate(dir.path) }}
                 style={{
                   ...ROW_STYLE, cursor: 'pointer',
                   background: isDroppingHere
@@ -848,9 +870,15 @@ export default function SFTPServer() {
                 setIsDragging(true)
               }}
               onDragEnd={() => { dragItemRef.current = null; setDropTarget(null); setIsDragging(false) }}
-              style={{ ...ROW_STYLE, cursor: 'grab' }}
-              onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--sapList_Hover_Background)' }}
-              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'var(--sapList_Background)' }}
+              onClick={() => setSelectedPath(file.path)}
+              style={{
+                ...ROW_STYLE, cursor: 'grab',
+                background: selectedPath === file.path ? 'var(--sapList_SelectionBackgroundColor)' : 'var(--sapList_Background)',
+                outline: selectedPath === file.path ? '2px solid var(--sapHighlightColor)' : 'none',
+                outlineOffset: '-2px',
+              }}
+              onMouseEnter={e => { if (selectedPath !== file.path) (e.currentTarget as HTMLDivElement).style.background = 'var(--sapList_Hover_Background)' }}
+              onMouseLeave={e => { if (selectedPath !== file.path) (e.currentTarget as HTMLDivElement).style.background = 'var(--sapList_Background)' }}
             >
               <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
                 <Icon name="document" style={{ fontSize: '1rem', color: 'var(--sapContent_LabelColor)', flexShrink: 0 }} />
