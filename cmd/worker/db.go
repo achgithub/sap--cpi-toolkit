@@ -25,6 +25,13 @@ CREATE TABLE IF NOT EXISTS w_http_requests (
     sort_order    INTEGER NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS w_lookup_tables (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    values     JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 `
 
 func initWorkerDB(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {

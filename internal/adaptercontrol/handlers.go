@@ -2,18 +2,24 @@ package adaptercontrol
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Handler holds the store and serves the adapter-control HTTP API.
 type Handler struct {
-	store *Store
+	store    *Store
+	sftpRoot string // absolute path to the SFTP data root on the shared volume
 }
 
-func NewHandler(store *Store) *Handler {
-	return &Handler{store: store}
+func NewHandler(store *Store, sftpRoot string) *Handler {
+	return &Handler{store: store, sftpRoot: filepath.Clean(sftpRoot)}
 }
 
 // RegisterRoutes attaches all routes to mux.
@@ -25,6 +31,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/adapter-activity/", h.handleAdapterActivity)
 	mux.HandleFunc("/sftp", h.handleSFTP)
 	mux.HandleFunc("/sftp/regenerate-key", h.handleSFTPRegenerateKey)
+	mux.HandleFunc("/sftp/files", h.handleSFTPFiles)
+	mux.HandleFunc("/sftp/mkdir", h.handleSFTPMkdir)
+	mux.HandleFunc("/sftp/upload", h.handleSFTPUpload)
+	mux.HandleFunc("/sftp/move", h.handleSFTPMove)
 	mux.HandleFunc("/system/log", h.handleSystemLog)
 	mux.HandleFunc("/assets", h.handleAssets)
 	mux.HandleFunc("/assets/", h.handleAssetDetail)
@@ -396,6 +406,215 @@ func (h *Handler) handleSystemLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, h.store.GetLog(200))
+}
+
+// ── SFTP file management ──────────────────────────────────────────────────────
+
+// sftpRealPath resolves a client path (absolute within the SFTP jail) to a real
+// filesystem path, rejecting anything that escapes the root.
+func (h *Handler) sftpRealPath(p string) (string, error) {
+	if h.sftpRoot == "" || h.sftpRoot == "." {
+		return "", fmt.Errorf("SFTP filesystem not configured")
+	}
+	abs := filepath.Join(h.sftpRoot, filepath.Clean("/"+p))
+	if abs != h.sftpRoot && !strings.HasPrefix(abs, h.sftpRoot+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes root")
+	}
+	return abs, nil
+}
+
+// handleSFTPFiles serves GET (list dir), POST (create text file), DELETE (remove entry).
+func (h *Handler) handleSFTPFiles(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		rawPath := r.URL.Query().Get("path")
+		if rawPath == "" {
+			rawPath = "/"
+		}
+		real, err := h.sftpRealPath(rawPath)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		dirEntries, err := os.ReadDir(real)
+		if err != nil {
+			if os.IsNotExist(err) {
+				writeJSON(w, []SFTPEntry{})
+				return
+			}
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		result := make([]SFTPEntry, 0, len(dirEntries))
+		for _, e := range dirEntries {
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			entryPath := strings.TrimRight(rawPath, "/") + "/" + e.Name()
+			if rawPath == "/" {
+				entryPath = "/" + e.Name()
+			}
+			t := "file"
+			if e.IsDir() {
+				t = "dir"
+			}
+			result = append(result, SFTPEntry{
+				Name:    e.Name(),
+				Path:    entryPath,
+				Type:    t,
+				Size:    info.Size(),
+				ModTime: info.ModTime().Format(time.RFC3339),
+			})
+		}
+		writeJSON(w, result)
+
+	case http.MethodPost:
+		var req struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		}
+		if !decodeBody(w, r, &req) {
+			return
+		}
+		real, err := h.sftpRealPath(req.Path)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(real), 0755); err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := os.WriteFile(real, []byte(req.Content), 0644); err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+
+	case http.MethodDelete:
+		rawPath := r.URL.Query().Get("path")
+		real, err := h.sftpRealPath(rawPath)
+		if err != nil {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := os.RemoveAll(real); err != nil {
+			jsonError(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+
+	default:
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleSFTPMkdir creates a directory (and any missing parents).
+func (h *Handler) handleSFTPMkdir(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Path string `json:"path"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	real, err := h.sftpRealPath(req.Path)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(real, 0755); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+
+// handleSFTPMove renames/moves a file or directory within the SFTP root.
+func (h *Handler) handleSFTPMove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		From string `json:"from"`
+		To   string `json:"to"`
+	}
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	fromReal, err := h.sftpRealPath(req.From)
+	if err != nil {
+		jsonError(w, "invalid source path", http.StatusBadRequest)
+		return
+	}
+	toReal, err := h.sftpRealPath(req.To)
+	if err != nil {
+		jsonError(w, "invalid destination path", http.StatusBadRequest)
+		return
+	}
+	// Prevent moving a directory into itself or a descendant
+	if strings.HasPrefix(toReal+string(filepath.Separator), fromReal+string(filepath.Separator)) {
+		jsonError(w, "cannot move a folder into itself", http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(toReal), 0755); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := os.Rename(fromReal, toReal); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// handleSFTPUpload accepts a multipart upload and writes files into the target directory.
+func (h *Handler) handleSFTPUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	dirPath := r.URL.Query().Get("path")
+	if dirPath == "" {
+		dirPath = "/"
+	}
+	realDir, err := h.sftpRealPath(dirPath)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(realDir, 0755); err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		jsonError(w, "failed to parse upload: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	for _, fh := range r.MultipartForm.File["files"] {
+		f, err := fh.Open()
+		if err != nil {
+			continue
+		}
+		dest := filepath.Join(realDir, filepath.Base(fh.Filename))
+		// Re-check after join in case filename contained path separators
+		if !strings.HasPrefix(dest, h.sftpRoot) {
+			f.Close()
+			continue
+		}
+		data, err := io.ReadAll(f)
+		f.Close()
+		if err != nil {
+			continue
+		}
+		os.WriteFile(dest, data, 0644) //nolint:errcheck
+	}
+	w.WriteHeader(http.StatusCreated)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

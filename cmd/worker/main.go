@@ -56,10 +56,9 @@ func main() {
 		mux.HandleFunc("/edi/from-xml", ediFromXMLHandler)
 		mux.HandleFunc("/edi/generate", ediGenerateHandler)
 
-		// Test data generator
-		mux.HandleFunc("/testdata/analyse", testdataAnalyseHandler)
-		mux.HandleFunc("/testdata/generate", testdataGenerateHandler)
-		mux.HandleFunc("/testdata/csv-template", testdataCSVTemplateHandler)
+		// Test data generator + lookup tables (persisted in Postgres)
+		registerTestdataRoutes(mux, pool)
+		registerLookupRoutes(mux, pool)
 
 		// HTTP client collections (persisted in Postgres)
 		registerCollectionRoutes(mux, pool)

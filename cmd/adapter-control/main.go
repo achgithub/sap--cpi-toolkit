@@ -42,7 +42,8 @@ func main() {
 		log.Printf("[adapter-control] warning: InitSFTP: %v", err)
 	}
 
-	handler := adaptercontrol.NewHandler(store)
+	sftpDataRoot := envOr("SFTP_DATA_ROOT", "")
+	handler := adaptercontrol.NewHandler(store, sftpDataRoot)
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)
 

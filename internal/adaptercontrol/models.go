@@ -83,6 +83,15 @@ type SFTPFile struct {
 	Content string `json:"content"`
 }
 
+// SFTPEntry is one item returned by the file-browser API.
+type SFTPEntry struct {
+	Name    string `json:"name"`
+	Path    string `json:"path"`    // absolute within SFTP root, e.g. "/inbound/orders.xml"
+	Type    string `json:"type"`    // "file" | "dir"
+	Size    int64  `json:"size"`
+	ModTime string `json:"mod_time"` // RFC3339
+}
+
 // ── CPI Connections ───────────────────────────────────────────────────────────
 
 type CPIConnection struct {

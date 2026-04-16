@@ -82,10 +82,13 @@ services:
     environment:
       PORT: ${ADAPTER_CONTROL_PORT:-8083}
       DB_URL: ${DB_URL:-postgres://toolkit:toolkit@postgres:5432/toolkit?sslmode=disable}
+      SFTP_DATA_ROOT: /sftp-data/sftp
+    volumes:
+      - sftp-data:/sftp-data
     depends_on:
       postgres:
         condition: service_healthy
-    mem_limit: 64m
+    mem_limit: 128m
     restart: unless-stopped
 
   # ── Mock HTTP receiver ────────────────────────────────────────────────────
@@ -109,10 +112,14 @@ services:
     build:
       context: ../../adapters/sftp
     ports:
-      - "2222:2222"
+      - "2222:22"
     environment:
       ADAPTER_ID: sftp
       CONTROL_PLANE_URL: http://adapter-control:8083
+      SFTP_ROOT_DIR: /data/sftp
+      HOST_KEY_PATH: /data/host_key
+    volumes:
+      - sftp-data:/data
     depends_on:
       - adapter-control
     mem_limit: 32m
@@ -120,3 +127,4 @@ services:
 
 volumes:
   postgres-data:
+  sftp-data:

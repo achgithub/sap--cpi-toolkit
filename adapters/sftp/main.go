@@ -12,7 +12,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sync"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -24,17 +25,11 @@ type AdapterConfig struct {
 	Name                  string       `json:"name"`
 	Type                  string       `json:"type"`
 	BehaviorMode          string       `json:"behavior_mode"`
-	Files                 []FileConfig `json:"files"`
 	AuthMode              string       `json:"auth_mode"`
 	SSHHostKey            string       `json:"ssh_host_key"`
 	SSHHostKeyFingerprint string       `json:"ssh_host_key_fingerprint"`
-	SSHPublicKey          string       `json:"ssh_public_key"` // authorized_keys format; if empty, accept any key
+	SSHPublicKey          string       `json:"ssh_public_key"` // authorized_keys format; empty = accept any key
 	Credentials           *Credentials `json:"credentials"`
-}
-
-type FileConfig struct {
-	Name    string `json:"name"`
-	Content string `json:"content"`
 }
 
 type Credentials struct {
@@ -42,222 +37,129 @@ type Credentials struct {
 	Password string `json:"password"`
 }
 
-// InMemoryFile is a single file held in the in-memory store.
-type InMemoryFile struct {
-	name    string
-	content []byte
-	size    int64
-	modTime time.Time
+// diskHandler serves the SFTP subsystem from a real directory on the host
+// filesystem (mounted via Docker volume). All paths are jail-rooted to prevent
+// traversal outside the volume.
+type diskHandler struct {
+	root string
 }
 
-// fileStore is a thread-safe in-memory file store that supports read, write,
-// delete, and rename — all operations CPI post-processing may require.
-type fileStore struct {
-	mu    sync.Mutex
-	files map[string]*InMemoryFile
-}
-
-func newFileStore(configs []FileConfig) *fileStore {
-	fs := &fileStore{files: make(map[string]*InMemoryFile)}
-	now := time.Now()
-	for _, f := range configs {
-		data := []byte(f.Content)
-		fs.files[f.Name] = &InMemoryFile{
-			name:    f.Name,
-			content: data,
-			size:    int64(len(data)),
-			modTime: now,
-		}
+func newDiskHandler(root string) (*diskHandler, error) {
+	if err := os.MkdirAll(root, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create sftp root %s: %w", root, err)
 	}
-	return fs
+	return &diskHandler{root: filepath.Clean(root)}, nil
 }
 
-func (fs *fileStore) get(path string) (*InMemoryFile, bool) {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-	f, ok := fs.files[path]
-	return f, ok
-}
-
-func (fs *fileStore) list() []*InMemoryFile {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-	out := make([]*InMemoryFile, 0, len(fs.files))
-	for _, f := range fs.files {
-		out = append(out, f)
+// realPath converts a client-supplied path (absolute within the SFTP jail)
+// to a real filesystem path, rejecting any attempt to escape the root.
+func (h *diskHandler) realPath(p string) (string, error) {
+	// filepath.Clean of "/<arbitrary>" strips double-slashes and dot segments.
+	abs := filepath.Join(h.root, filepath.Clean("/"+p))
+	if !strings.HasPrefix(abs, h.root+string(filepath.Separator)) && abs != h.root {
+		return "", sftp.ErrSSHFxPermissionDenied
 	}
-	return out
+	return abs, nil
 }
 
-func (fs *fileStore) delete(path string) error {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-	if _, ok := fs.files[path]; !ok {
-		return sftp.ErrSSHFxNoSuchFile
+func (h *diskHandler) Fileread(r *sftp.Request) (io.ReaderAt, error) {
+	real, err := h.realPath(r.Filepath)
+	if err != nil {
+		return nil, err
 	}
-	delete(fs.files, path)
-	log.Printf("SFTP delete: %s", path)
-	return nil
+	return os.Open(real)
 }
 
-func (fs *fileStore) rename(oldPath, newPath string) error {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-	f, ok := fs.files[oldPath]
-	if !ok {
-		return sftp.ErrSSHFxNoSuchFile
+func (h *diskHandler) Filewrite(r *sftp.Request) (io.WriterAt, error) {
+	real, err := h.realPath(r.Filepath)
+	if err != nil {
+		return nil, err
 	}
-	f.name = newPath
-	fs.files[newPath] = f
-	delete(fs.files, oldPath)
-	log.Printf("SFTP rename: %s → %s", oldPath, newPath)
-	return nil
-}
-
-func (fs *fileStore) write(path string, data []byte) {
-	fs.mu.Lock()
-	defer fs.mu.Unlock()
-	fs.files[path] = &InMemoryFile{
-		name:    path,
-		content: data,
-		size:    int64(len(data)),
-		modTime: time.Now(),
+	if err := os.MkdirAll(filepath.Dir(real), 0755); err != nil {
+		return nil, err
 	}
-	log.Printf("SFTP write: %s (%d bytes)", path, len(data))
+	return os.OpenFile(real, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0644)
 }
 
-// fileWriter buffers a write operation and commits to the store on Close.
-type fileWriter struct {
-	store *fileStore
-	path  string
-	mu    sync.Mutex
-	data  []byte
-}
-
-func (fw *fileWriter) WriteAt(p []byte, off int64) (int, error) {
-	fw.mu.Lock()
-	defer fw.mu.Unlock()
-	end := off + int64(len(p))
-	if end > int64(len(fw.data)) {
-		grown := make([]byte, end)
-		copy(grown, fw.data)
-		fw.data = grown
+func (h *diskHandler) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
+	real, err := h.realPath(r.Filepath)
+	if err != nil {
+		return nil, err
 	}
-	copy(fw.data[off:], p)
-	return len(p), nil
-}
 
-func (fw *fileWriter) Close() error {
-	fw.store.write(fw.path, fw.data)
-	return nil
-}
-
-// SFTPHandler implements all four sftp.Handlers interfaces.
-type SFTPHandler struct {
-	store *fileStore
-}
-
-func (h *SFTPHandler) Fileread(r *sftp.Request) (io.ReaderAt, error) {
-	f, ok := h.store.get(r.Filepath)
-	if !ok {
-		return nil, sftp.ErrSSHFxNoSuchFile
-	}
-	return &fileReader{data: f.content}, nil
-}
-
-func (h *SFTPHandler) Filelist(r *sftp.Request) (sftp.ListerAt, error) {
-	path := r.Filepath
-	if path == "/" || path == "" || path == "." {
-		return &fileLister{files: h.store.list()}, nil
-	}
-	// Stat a specific file
-	if f, ok := h.store.get(path); ok {
-		return &fileLister{files: []*InMemoryFile{f}}, nil
-	}
-	return nil, sftp.ErrSSHFxNoSuchFile
-}
-
-func (h *SFTPHandler) Filewrite(r *sftp.Request) (io.WriterAt, error) {
-	return &fileWriter{store: h.store, path: r.Filepath}, nil
-}
-
-func (h *SFTPHandler) Filecmd(r *sftp.Request) error {
 	switch r.Method {
-	case "remove", "Remove":
-		return h.store.delete(r.Filepath)
-	case "rename", "Rename":
-		return h.store.rename(r.Filepath, r.Target)
-	case "mkdir", "Mkdir":
-		// Accept silently — CPI may create directories before writing
-		log.Printf("SFTP mkdir (no-op): %s", r.Filepath)
+	case "List":
+		entries, err := os.ReadDir(real)
+		if err != nil {
+			return nil, err
+		}
+		infos := make([]os.FileInfo, 0, len(entries))
+		for _, e := range entries {
+			info, err := e.Info()
+			if err != nil {
+				continue
+			}
+			infos = append(infos, info)
+		}
+		return listerAt(infos), nil
+
+	case "Stat", "Lstat":
+		info, err := os.Stat(real)
+		if err != nil {
+			return nil, err
+		}
+		return listerAt([]os.FileInfo{info}), nil
+	}
+	return nil, fmt.Errorf("unsupported list method: %s", r.Method)
+}
+
+func (h *diskHandler) Filecmd(r *sftp.Request) error {
+	real, err := h.realPath(r.Filepath)
+	if err != nil {
+		return err
+	}
+	switch r.Method {
+	case "Setstat":
 		return nil
-	case "rmdir", "Rmdir":
-		log.Printf("SFTP rmdir (no-op): %s", r.Filepath)
-		return nil
-	case "setstat", "Setstat":
-		// Ignore attribute updates
-		return nil
+	case "Rename":
+		target, err := h.realPath(r.Target)
+		if err != nil {
+			return err
+		}
+		return os.Rename(real, target)
+	case "Rmdir":
+		return os.Remove(real)
+	case "Remove":
+		return os.Remove(real)
+	case "Mkdir":
+		return os.MkdirAll(real, 0755)
+	case "Symlink":
+		return sftp.ErrSSHFxOpUnsupported
 	default:
-		log.Printf("SFTP unsupported cmd: %s on %s", r.Method, r.Filepath)
 		return fmt.Errorf("unsupported command: %s", r.Method)
 	}
 }
 
-// fileReader implements io.ReaderAt over a byte slice.
-type fileReader struct {
-	data []byte
-}
+// listerAt satisfies sftp.ListerAt over a pre-fetched []os.FileInfo.
+type listerAt []os.FileInfo
 
-func (f *fileReader) ReadAt(p []byte, off int64) (int, error) {
-	if off >= int64(len(f.data)) {
+func (l listerAt) ListAt(ls []os.FileInfo, offset int64) (int, error) {
+	idx := int(offset)
+	if idx >= len(l) {
 		return 0, io.EOF
 	}
-	n := copy(p, f.data[off:])
-	if off+int64(n) >= int64(len(f.data)) {
+	n := copy(ls, l[idx:])
+	if idx+n >= len(l) {
 		return n, io.EOF
 	}
 	return n, nil
 }
 
-// fileLister implements sftp.ListerAt over a slice of InMemoryFile.
-type fileLister struct {
-	files []*InMemoryFile
-}
-
-func (fl *fileLister) ListAt(ls []os.FileInfo, offset int64) (int, error) {
-	idx := int(offset)
-	if idx >= len(fl.files) {
-		return 0, io.EOF
-	}
-	count := 0
-	for idx < len(fl.files) && count < len(ls) {
-		f := fl.files[idx]
-		ls[count] = &fileInfo{name: f.name, size: f.size, modTime: f.modTime}
-		idx++
-		count++
-	}
-	if idx >= len(fl.files) {
-		return count, io.EOF
-	}
-	return count, nil
-}
-
-type fileInfo struct {
-	name    string
-	size    int64
-	modTime time.Time
-}
-
-func (f *fileInfo) Name() string       { return f.name }
-func (f *fileInfo) Size() int64        { return f.size }
-func (f *fileInfo) Mode() os.FileMode  { return 0644 }
-func (f *fileInfo) ModTime() time.Time { return f.modTime }
-func (f *fileInfo) IsDir() bool        { return false }
-func (f *fileInfo) Sys() interface{}   { return nil }
-
 func main() {
 	adapterID := os.Getenv("ADAPTER_ID")
 	controlPlaneURL := os.Getenv("CONTROL_PLANE_URL")
+	sftpRoot := os.Getenv("SFTP_ROOT_DIR")
+	hostKeyPath := os.Getenv("HOST_KEY_PATH")
 
 	if adapterID == "" {
 		log.Fatal("ADAPTER_ID environment variable is required")
@@ -265,26 +167,34 @@ func main() {
 	if controlPlaneURL == "" {
 		controlPlaneURL = "http://control-plane:8080"
 	}
+	if sftpRoot == "" {
+		sftpRoot = "/data/sftp"
+	}
+	if hostKeyPath == "" {
+		hostKeyPath = "/data/host_key"
+	}
 
-	log.Printf("SFTP Adapter started (ID: %s)", adapterID)
+	log.Printf("SFTP Adapter started (ID: %s, root: %s)", adapterID, sftpRoot)
 
-	// Fetch initial config to get the host key.
-	// Non-fatal: if the control plane isn't ready yet (e.g. Docker startup race),
-	// fall back to a temporary generated key. Per-connection config fetches will
-	// pick up the real config once a scenario is launched.
+	handler, err := newDiskHandler(sftpRoot)
+	if err != nil {
+		log.Fatalf("Failed to initialise SFTP root: %v", err)
+	}
+
+	// Fetch initial config for the SSH host key.  Non-fatal if the control
+	// plane isn't ready yet — we fall back to the persisted key on disk.
 	config, err := fetchConfig(adapterID, controlPlaneURL)
 	if err != nil {
-		log.Printf("Warning: failed to fetch initial config: %v — using temporary SSH host key", err)
+		log.Printf("Warning: failed to fetch initial config: %v — using persisted/generated host key", err)
 		config = &AdapterConfig{}
 	}
 
-	hostKey, err := loadOrGenerateHostKey(config.SSHHostKey)
+	hostKey, err := loadOrGenerateHostKey(config.SSHHostKey, hostKeyPath)
 	if err != nil {
 		log.Fatalf("Failed to load host key: %v", err)
 	}
 	log.Printf("SSH host key fingerprint: %s", ssh.FingerprintSHA256(hostKey.PublicKey()))
 
-	// SSH server config — auth callbacks fetch fresh config on each attempt.
 	sshConfig := &ssh.ServerConfig{
 		PasswordCallback: func(conn ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			cfg, err := fetchConfig(adapterID, controlPlaneURL)
@@ -308,7 +218,7 @@ func main() {
 		log.Fatalf("Failed to listen on port 22: %v", err)
 	}
 	defer listener.Close()
-	log.Printf("SFTP Server listening on :22")
+	log.Printf("SFTP Server listening on :22 (root: %s)", sftpRoot)
 
 	for {
 		conn, err := listener.Accept()
@@ -316,31 +226,23 @@ func main() {
 			log.Printf("Accept error: %v", err)
 			continue
 		}
-		go handleConnection(conn, sshConfig, adapterID, controlPlaneURL)
+		go handleConnection(conn, sshConfig, handler, adapterID, controlPlaneURL)
 	}
 }
 
 func reportActivity(adapterID, controlPlaneURL string) {
 	go func() {
 		c := &http.Client{Timeout: 2 * time.Second}
-		c.Post(fmt.Sprintf("%s/api/adapter-activity/%s", controlPlaneURL, adapterID), "application/json", nil)
+		c.Post(fmt.Sprintf("%s/adapter-activity/%s", controlPlaneURL, adapterID), "application/json", nil)
 	}()
 }
 
-func handleConnection(conn net.Conn, sshConfig *ssh.ServerConfig, adapterID, controlPlaneURL string) {
+func handleConnection(conn net.Conn, sshConfig *ssh.ServerConfig, handler *diskHandler, adapterID, controlPlaneURL string) {
 	reportActivity(adapterID, controlPlaneURL)
 	defer conn.Close()
 
-	// Fetch fresh config for this connection — picks up file/credential changes without restart.
-	config, err := fetchConfig(adapterID, controlPlaneURL)
-	if err != nil {
-		log.Printf("Failed to fetch config for connection: %v", err)
-		return
-	}
-
 	sshConn, chans, reqs, err := ssh.NewServerConn(conn, sshConfig)
 	if err != nil {
-		// EOF = probe (k8s liveness/readiness) or client disconnect before handshake — not a real error
 		if err.Error() != "EOF" {
 			log.Printf("SSH handshake error: %v", err)
 		}
@@ -350,8 +252,6 @@ func handleConnection(conn net.Conn, sshConfig *ssh.ServerConfig, adapterID, con
 	log.Printf("SSH login from %s as %s", sshConn.RemoteAddr(), sshConn.User())
 
 	go ssh.DiscardRequests(reqs)
-
-	store := newFileStore(config.Files)
 
 	for newChannel := range chans {
 		if newChannel.ChannelType() != "session" {
@@ -363,16 +263,15 @@ func handleConnection(conn net.Conn, sshConfig *ssh.ServerConfig, adapterID, con
 			log.Printf("Could not accept channel: %v", err)
 			continue
 		}
-		go handleChannel(channel, requests, store)
+		go handleChannel(channel, requests, handler)
 	}
 }
 
-func handleChannel(channel ssh.Channel, requests <-chan *ssh.Request, store *fileStore) {
+func handleChannel(channel ssh.Channel, requests <-chan *ssh.Request, handler *diskHandler) {
 	defer channel.Close()
 	for req := range requests {
 		if req.Type == "subsystem" && string(req.Payload[4:]) == "sftp" {
 			req.Reply(true, nil)
-			handler := &SFTPHandler{store: store}
 			server := sftp.NewRequestServer(channel, sftp.Handlers{
 				FileGet:  handler,
 				FilePut:  handler,
@@ -392,19 +291,25 @@ func handlePasswordAuth(user, pass string, config *AdapterConfig) (*ssh.Permissi
 	if config.BehaviorMode == "failure" {
 		return nil, fmt.Errorf("authentication failed")
 	}
+	if config.AuthMode == "key" {
+		return nil, fmt.Errorf("password auth disabled")
+	}
 	if config.Credentials != nil {
 		if user == config.Credentials.Username && pass == config.Credentials.Password {
 			return &ssh.Permissions{}, nil
 		}
 		return nil, fmt.Errorf("invalid credentials")
 	}
-	// No credentials configured — accept anything
+	// No credentials configured — accept anything in success mode
 	return &ssh.Permissions{}, nil
 }
 
 func handlePublicKeyAuth(user string, key ssh.PublicKey, config *AdapterConfig) (*ssh.Permissions, error) {
 	if config.BehaviorMode == "failure" {
 		return nil, fmt.Errorf("authentication failed")
+	}
+	if config.AuthMode == "password" {
+		return nil, fmt.Errorf("public key auth disabled")
 	}
 	if config.SSHPublicKey != "" {
 		authorizedKey, _, _, _, err := ssh.ParseAuthorizedKey([]byte(config.SSHPublicKey))
@@ -416,13 +321,13 @@ func handlePublicKeyAuth(user string, key ssh.PublicKey, config *AdapterConfig) 
 		}
 		return &ssh.Permissions{}, nil
 	}
-	// No public key configured — accept any key in success mode
+	// No public key configured and mode is key/any — accept any key in success mode
 	return &ssh.Permissions{}, nil
 }
 
 func fetchConfig(adapterID, controlPlaneURL string) (*AdapterConfig, error) {
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("%s/api/adapter-config/%s", controlPlaneURL, adapterID))
+	resp, err := client.Get(fmt.Sprintf("%s/adapter-config/%s", controlPlaneURL, adapterID))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch config: %w", err)
 	}
@@ -438,24 +343,62 @@ func fetchConfig(adapterID, controlPlaneURL string) (*AdapterConfig, error) {
 	return &config, nil
 }
 
-// loadOrGenerateHostKey uses the PEM key from config if available,
-// otherwise generates a temporary one (fingerprint will change on restart).
-func loadOrGenerateHostKey(keyPEM string) (ssh.Signer, error) {
+// loadOrGenerateHostKey resolves the host key in priority order:
+//  1. PEM supplied via control-plane config (e.g. a known, pinned key)
+//  2. Key persisted on disk at keyPath (stable across restarts)
+//  3. Generate a new key and persist it to keyPath for next time
+func loadOrGenerateHostKey(keyPEM, keyPath string) (ssh.Signer, error) {
 	if keyPEM != "" {
-		block, _ := pem.Decode([]byte(keyPEM))
-		if block == nil {
-			return nil, fmt.Errorf("failed to decode PEM block from config")
-		}
-		privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse private key: %w", err)
-		}
-		return ssh.NewSignerFromKey(privateKey)
+		return signerFromPEM([]byte(keyPEM))
 	}
-	log.Printf("Warning: no SSH host key in config — generating a temporary key. Fingerprint will change on each restart.")
+
+	if keyPath != "" {
+		if data, err := os.ReadFile(keyPath); err == nil {
+			signer, err := signerFromPEM(data)
+			if err == nil {
+				return signer, nil
+			}
+			log.Printf("Warning: persisted host key at %s is invalid (%v) — regenerating", keyPath, err)
+		}
+	}
+
+	log.Printf("Generating new SSH host key")
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate RSA key: %w", err)
 	}
+
+	// Persist so the fingerprint survives restarts.
+	if keyPath != "" {
+		if err := persistHostKey(privateKey, keyPath); err != nil {
+			log.Printf("Warning: could not persist host key to %s: %v", keyPath, err)
+		} else {
+			log.Printf("Host key persisted to %s", keyPath)
+		}
+	}
+
 	return ssh.NewSignerFromKey(privateKey)
+}
+
+func signerFromPEM(data []byte) (ssh.Signer, error) {
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, fmt.Errorf("failed to decode PEM block")
+	}
+	privateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
+	}
+	return ssh.NewSignerFromKey(privateKey)
+}
+
+func persistHostKey(key *rsa.PrivateKey, path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	return os.WriteFile(path, pemBytes, 0600)
 }

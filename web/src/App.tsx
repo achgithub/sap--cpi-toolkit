@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import React, { useState, useCallback } from 'react'
 import {
   ShellBar,
   ShellBarItem,
@@ -15,10 +15,12 @@ import Converter from './pages/Converter'
 import KeyGen from './pages/KeyGen'
 import CertGen from './pages/CertGen'
 import TestDataGen from './pages/TestDataGen'
+import LookupTables from './pages/LookupTables'
 import GroovyIDE from './pages/GroovyIDE'
 import EDITools from './pages/EDITools'
 import ScriptLibrary from './pages/ScriptLibrary'
 import HttpClient from './pages/HttpClient'
+import MockService from './pages/MockService'
 import SFTPServer from './pages/SFTPServer'
 import AssetStore from './pages/AssetStore'
 import { type SampleInput } from './data/scriptLibrary'
@@ -35,10 +37,18 @@ type ToolTab =
   | 'edi'
   | 'library'
   | 'http-client'
+  | 'mock'
   | 'sftp'
   | 'assets'
+  | 'lookup-tables'
 
 const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
+  {
+    label: 'HTTP Client',
+    tabs: [
+      { id: 'http-client', label: 'HTTP Client' },
+    ],
+  },
   {
     label: 'Format & Convert',
     tabs: [
@@ -50,21 +60,32 @@ const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
     ],
   },
   {
+    label: 'Generator',
+    tabs: [
+      { id: 'testdata',      label: 'Test Data'      },
+      { id: 'lookup-tables', label: 'Lookup Tables'  },
+    ],
+  },
+  {
+    label: 'Keys & Certs',
+    tabs: [
+      { id: 'keygen',  label: 'Key Generation' },
+      { id: 'certgen', label: 'Certificates'   },
+    ],
+  },
+  {
+    label: 'Utilities',
+    tabs: [
+      { id: 'mock',   label: 'Mock Service' },
+      { id: 'sftp',   label: 'SFTP Server'  },
+      { id: 'assets', label: 'Asset Store'  },
+    ],
+  },
+  {
     label: 'Groovy',
     tabs: [
       { id: 'groovy',  label: 'Groovy IDE'     },
       { id: 'library', label: 'Script Library' },
-    ],
-  },
-  {
-    label: 'Testing',
-    tabs: [
-      { id: 'testdata',    label: 'Test Data'      },
-      { id: 'keygen',     label: 'Key Generation' },
-      { id: 'certgen',    label: 'Certificates'   },
-      { id: 'http-client', label: 'HTTP Client'   },
-      { id: 'sftp',       label: 'SFTP Server'    },
-      { id: 'assets',            label: 'Asset Store'    },
     ],
   },
 ]
@@ -95,36 +116,65 @@ export default function App() {
         }}
         style={{ borderBottom: '1px solid var(--sapList_BorderColor)' }}
       >
-        {GROUPS.map((group) => (
-          <Tab
-            key={group.label}
-            text={group.label}
-            items={group.tabs.map((tab) => (
-              <Tab
-                key={tab.id}
-                data-id={tab.id}
-                text={tab.label}
-                selected={activeTab === tab.id}
-              />
-            ))}
-          />
-        ))}
+        {GROUPS.map((group) =>
+          group.tabs.length === 1 ? (
+            <Tab
+              key={group.label}
+              data-id={group.tabs[0].id}
+              text={group.label}
+              selected={activeTab === group.tabs[0].id}
+            />
+          ) : (
+            <Tab
+              key={group.label}
+              text={group.label}
+              items={group.tabs.map((tab) => (
+                <Tab
+                  key={tab.id}
+                  data-id={tab.id}
+                  text={tab.label}
+                  selected={activeTab === tab.id}
+                />
+              ))}
+            />
+          )
+        )}
       </TabContainer>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '1rem', background: 'var(--sapBackgroundColor)' }}>
-        {activeTab === 'xml-formatter'  && <XMLFormatter />}
-        {activeTab === 'json-formatter' && <JSONFormatter />}
-        {activeTab === 'xsd-generator'  && <XSDGenerator />}
-        {activeTab === 'converter'      && <Converter />}
-        {activeTab === 'keygen'         && <KeyGen />}
-        {activeTab === 'certgen'        && <CertGen />}
-        {activeTab === 'testdata'       && <TestDataGen />}
-        {activeTab === 'groovy'         && <GroovyIDE inject={ideInject} />}
-        {activeTab === 'edi'                && <EDITools />}
-        {activeTab === 'library'            && <ScriptLibrary onLoadInIDE={loadInIDE} />}
-        {activeTab === 'http-client' && <HttpClient />}
-        {activeTab === 'sftp'        && <SFTPServer />}
-        {activeTab === 'assets'             && <AssetStore />}
+      <div style={{ flex: 1, overflow: 'auto', background: 'var(--sapBackgroundColor)', position: 'relative' }}>
+        {([
+          ['xml-formatter',  <XMLFormatter />],
+          ['json-formatter', <JSONFormatter />],
+          ['xsd-generator',  <XSDGenerator />],
+          ['converter',      <Converter />],
+          ['keygen',         <KeyGen />],
+          ['certgen',        <CertGen />],
+          ['testdata',       <TestDataGen />],
+          ['lookup-tables',  <LookupTables />],
+          ['groovy',         <GroovyIDE inject={ideInject} />],
+          ['edi',            <EDITools />],
+          ['library',        <ScriptLibrary onLoadInIDE={loadInIDE} />],
+          ['http-client',    <HttpClient />],
+          ['mock',           <MockService />],
+          ['sftp',           <SFTPServer />],
+        ] as [ToolTab, React.ReactNode][]).map(([id, node]) => (
+          <div
+            key={id}
+            style={{
+              display:  activeTab === id ? 'block' : 'none',
+              padding:  '1rem',
+              height:   '100%',
+              boxSizing: 'border-box',
+            }}
+          >
+            {node}
+          </div>
+        ))}
+        {activeTab === 'assets' && (
+          <div style={{ padding: '1rem', height: '100%', boxSizing: 'border-box' }}>
+            <AssetStore />
+          </div>
+        )}
       </div>
     </FlexBox>
   )

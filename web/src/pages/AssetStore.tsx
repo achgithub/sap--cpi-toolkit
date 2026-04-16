@@ -372,8 +372,8 @@ export default function AssetStore() {
                   subtitleText={new Date(a.created_at).toLocaleString()}
                   action={
                     <FlexBox style={{ gap: '0.25rem' }}>
-                      <Button design="Transparent" icon="copy" onClick={() => copyToClipboard(a.content)} />
-                      <Button design="Transparent" icon="delete" onClick={() => deleteAsset(a.id)} />
+                      <Button design="Default" onClick={() => copyToClipboard(a.content)}>Copy</Button>
+                      <Button design="Negative" onClick={() => deleteAsset(a.id)}>Delete</Button>
                     </FlexBox>
                   }
                 />

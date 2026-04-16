@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Button,
   Card,
@@ -10,14 +10,16 @@ import {
   Input,
   Label,
   MessageStrip,
+  Option,
+  Select,
   SegmentedButton,
   SegmentedButtonItem,
   TextArea,
   Toolbar,
-  ToolbarSpacer,
 } from '@ui5/webcomponents-react'
 import { useWorker } from '../hooks/useWorker'
-import { SaveToAssetsButton, LoadFromAssetButton } from './AssetStore'
+import { saveAsset, LoadFromAssetButton } from './AssetStore'
+import { type LookupTable } from './LookupTables'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,18 +41,19 @@ interface CSVTemplateResponse {
 }
 
 interface FieldConfig {
-  path:          string
-  type:          string
-  mode:          'random' | 'fixed' | 'expression'
-  value:         string
-  expression:    string
-  min:           number
-  max:           number
-  decimal_places: number
-  date_start:    string
-  date_end:      string
-  prefix:        string
-  length:        number
+  path:             string
+  type:             string
+  mode:             'random' | 'fixed' | 'expression' | 'lookup'
+  value:            string
+  expression:       string
+  min:              number
+  max:              number
+  decimal_places:   number
+  date_start:       string
+  date_end:         string
+  prefix:           string
+  length:           number
+  lookup_table_id:  string
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,18 +63,19 @@ function defaultConfig(field: Field): FieldConfig {
   const yearAgo = new Date(now); yearAgo.setFullYear(now.getFullYear() - 1)
   const fmt = (d: Date) => d.toISOString().split('T')[0]
   return {
-    path:           field.path,
-    type:           field.detected_type,
-    mode:           'random',
-    value:          field.sample_value,
-    expression:     '',
-    min:            1,
-    max:            9999,
-    decimal_places: 2,
-    date_start:     fmt(yearAgo),
-    date_end:       fmt(now),
-    prefix:         '',
-    length:         8,
+    path:            field.path,
+    type:            field.detected_type,
+    mode:            'random',
+    value:           field.sample_value,
+    expression:      '',
+    min:             1,
+    max:             9999,
+    decimal_places:  2,
+    date_start:      fmt(yearAgo),
+    date_end:        fmt(now),
+    prefix:          '',
+    length:          8,
+    lookup_table_id: '',
   }
 }
 
@@ -131,6 +135,84 @@ function inpVal(e: Event) {
   return (e.target as unknown as HTMLInputElement).value
 }
 
+// ── Save Generated To Assets ──────────────────────────────────────────────────
+// Generates all N documents via generate-batch and saves each as a separate asset.
+
+function SaveGeneratedToAssets({ templateXML, fields, count }: {
+  templateXML: string
+  fields: FieldConfig[]
+  count: number
+}) {
+  const [saving,    setSaving]    = useState(false)
+  const [showInput, setShowInput] = useState(false)
+  const [name,      setName]      = useState('generated')
+  const [feedback,  setFeedback]  = useState('')
+
+  if (!templateXML.trim()) return null
+
+  const doSave = async () => {
+    if (!name.trim()) return
+    setSaving(true); setFeedback('')
+    try {
+      const res = await fetch('/api/worker/testdata/generate-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: templateXML, count, fields }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        throw new Error(json.error ?? `HTTP ${res.status}`)
+      }
+      const { documents }: { documents: string[] } = await res.json()
+      const pad = String(documents.length).length
+      for (let i = 0; i < documents.length; i++) {
+        const suffix = String(i + 1).padStart(pad, '0')
+        await saveAsset(`${name.trim()}_${suffix}`, documents[i], 'xml')
+      }
+      setFeedback(`Saved ${documents.length} asset${documents.length !== 1 ? 's' : ''}!`)
+      setShowInput(false)
+      setName('generated')
+      setTimeout(() => setFeedback(''), 3000)
+    } catch (e: unknown) {
+      setFeedback('Error: ' + (e instanceof Error ? e.message : String(e)))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+      {feedback && (
+        <Label style={{ color: feedback.startsWith('Error') ? 'var(--sapNegativeColor)' : 'var(--sapPositiveColor)' }}>
+          {feedback}
+        </Label>
+      )}
+      {showInput && (
+        <Input
+          value={name}
+          placeholder="Asset name prefix…"
+          style={{ width: '200px' }}
+          onInput={(e) => setName((e.target as any).value)}
+          onKeyDown={(e: any) => { if (e.key === 'Enter') doSave() }}
+        />
+      )}
+      <Button
+        design="Transparent"
+        icon="save"
+        onClick={() => showInput ? doSave() : setShowInput(true)}
+        disabled={saving || (showInput && !name.trim())}
+      >
+        {showInput
+          ? (saving ? `Saving ${count}…` : `Save ${count} to Assets`)
+          : 'Save to Assets'}
+      </Button>
+      {showInput && (
+        <Button design="Transparent" onClick={() => setShowInput(false)}>Cancel</Button>
+      )}
+    </FlexBox>
+  )
+}
+
 function downloadText(content: string, filename: string, mime = 'text/plain') {
   const blob = new Blob([content], { type: mime })
   const url  = URL.createObjectURL(blob)
@@ -168,9 +250,10 @@ function TypeSelector({ value, onChange }: { value: string; onChange: (t: string
 
 // ── Field config panel ───────────────────────────────────────────────────────
 
-function FieldConfigPanel({ config, allFields, onChange }: {
+function FieldConfigPanel({ config, allFields, lookupTables, onChange }: {
   config: FieldConfig
   allFields: Field[]
+  lookupTables: LookupTable[]
   onChange: (u: Partial<FieldConfig>) => void
 }) {
   const num = (s: string) => parseFloat(s) || 0
@@ -191,12 +274,13 @@ function FieldConfigPanel({ config, allFields, onChange }: {
         <SegmentedButton
           onSelectionChange={(e) => {
             const m = segItem(e as unknown as Event)?.getAttribute('data-mode')
-            if (m === 'random' || m === 'fixed' || m === 'expression') onChange({ mode: m })
+            if (m === 'random' || m === 'fixed' || m === 'expression' || m === 'lookup') onChange({ mode: m })
           }}
         >
           <SegmentedButtonItem data-mode="random"     selected={config.mode === 'random'}>Random</SegmentedButtonItem>
           <SegmentedButtonItem data-mode="fixed"      selected={config.mode === 'fixed'}>Fixed</SegmentedButtonItem>
           <SegmentedButtonItem data-mode="expression" selected={config.mode === 'expression'}>Expression</SegmentedButtonItem>
+          <SegmentedButtonItem data-mode="lookup"     selected={config.mode === 'lookup'}>Lookup</SegmentedButtonItem>
         </SegmentedButton>
       </FlexBox>
 
@@ -206,6 +290,43 @@ function FieldConfigPanel({ config, allFields, onChange }: {
           <Label style={{ minWidth: '4rem' }}>Value</Label>
           <Input value={config.value} style={{ flex: 1 }}
             onInput={(e) => onChange({ value: inpVal(e as unknown as Event) })} />
+        </FlexBox>
+      )}
+
+      {/* ── Lookup Table ── */}
+      {config.mode === 'lookup' && (
+        <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.5rem' }}>
+          {lookupTables.length === 0 ? (
+            <MessageStrip design="Information" hideCloseButton>
+              No lookup tables found. Create one in the <strong>Lookup Tables</strong> tab first.
+            </MessageStrip>
+          ) : (
+            <FlexBox direction={FlexBoxDirection.Row} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+              <Label style={{ minWidth: '4rem' }}>Table</Label>
+              <Select
+                style={{ flex: 1 }}
+                onChange={(e) => onChange({ lookup_table_id: (e.detail.selectedOption as HTMLElement).dataset.value ?? '' })}
+              >
+                <Option data-value="" selected={!config.lookup_table_id}>— select a table —</Option>
+                {lookupTables.map(t => (
+                  <Option key={t.id} data-value={t.id} selected={config.lookup_table_id === t.id}>
+                    {t.name} ({t.values.length} value{t.values.length !== 1 ? 's' : ''})
+                  </Option>
+                ))}
+              </Select>
+            </FlexBox>
+          )}
+          {config.lookup_table_id && (() => {
+            const tbl = lookupTables.find(t => t.id === config.lookup_table_id)
+            if (!tbl) return null
+            const preview = tbl.values.slice(0, 6).join(', ')
+            const more = tbl.values.length > 6 ? ` … +${tbl.values.length - 6} more` : ''
+            return (
+              <Label style={{ fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'monospace' }}>
+                {preview}{more}
+              </Label>
+            )
+          })()}
         </FlexBox>
       )}
 
@@ -324,13 +445,14 @@ function FieldConfigPanel({ config, allFields, onChange }: {
 
 // ── Field row ────────────────────────────────────────────────────────────────
 
-function FieldRow({ field, isSelected, isCsvCovered, isRepeat, config, allFields, onToggle, onConfigChange }: {
+function FieldRow({ field, isSelected, isCsvCovered, isRepeat, config, allFields, lookupTables, onToggle, onConfigChange }: {
   field: Field
   isSelected: boolean
   isCsvCovered: boolean
   isRepeat: boolean
   config: FieldConfig
   allFields: Field[]
+  lookupTables: LookupTable[]
   onToggle: () => void
   onConfigChange: (u: Partial<FieldConfig>) => void
 }) {
@@ -358,7 +480,7 @@ function FieldRow({ field, isSelected, isCsvCovered, isRepeat, config, allFields
 
       {isSelected && !isCsvCovered && (
         <div style={{ paddingLeft: '2rem' }}>
-          <FieldConfigPanel config={config} allFields={allFields} onChange={onConfigChange} />
+          <FieldConfigPanel config={config} allFields={allFields} lookupTables={lookupTables} onChange={onConfigChange} />
         </div>
       )}
       {isSelected && isCsvCovered && (
@@ -415,8 +537,17 @@ export default function TestDataGen() {
   const [genError,       setGenError]       = useState<string | null>(null)
   const [csvTplLoading,  setCsvTplLoading]  = useState(false)
   const [csvTplError,    setCsvTplError]    = useState<string | null>(null)
+  const [lookupTables,   setLookupTables]   = useState<LookupTable[]>([])
 
   const csvUploadRef = useRef<HTMLInputElement>(null)
+
+  // Load lookup tables once on mount (best-effort — generator still works without them).
+  useEffect(() => {
+    fetch('/api/worker/testdata/lookup-tables')
+      .then(r => r.ok ? r.json() : [])
+      .then((data: LookupTable[]) => setLookupTables(data))
+      .catch(() => {})
+  }, [])
 
   const { post, loading: analysing, error: analyseError } = useWorker<{ content: string; input_type: string }, AnalyseResponse>()
 
@@ -744,6 +875,7 @@ export default function TestDataGen() {
                 isRepeat={repeatPoints.some(rp => field.path.startsWith(rp + '.') || field.path === rp)}
                 config={configs[field.path]}
                 allFields={fields}
+                lookupTables={lookupTables}
                 onToggle={() => toggleField(field.path)}
                 onConfigChange={(upd) => updateConfig(field.path, upd)}
               />
@@ -786,15 +918,18 @@ export default function TestDataGen() {
               </MessageStrip>
             )}
 
-            <Toolbar>
+            <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
               <Button design="Emphasized" disabled={generating || !templateXML.trim()} onClick={generate}>
                 {generating
                   ? 'Generating…'
                   : `Generate ${countNum} document${countNum !== 1 ? 's' : ''} (ZIP)`}
               </Button>
-              <SaveToAssetsButton content={templateXML} contentType="xml" suggestedName="test_template" />
-              <ToolbarSpacer />
-              <Label style={{ color: 'var(--sapNeutralColor)' }}>
+              <SaveGeneratedToAssets
+                templateXML={templateXML}
+                fields={fields.filter(f => selected.has(f.path)).map(f => configs[f.path]).filter(Boolean)}
+                count={countNum}
+              />
+              <Label style={{ color: 'var(--sapNeutralColor)', marginLeft: 'auto' }}>
                 {csvIsNested
                   ? `Nested CSV — repeat points expanded`
                   : csvActive
@@ -803,7 +938,7 @@ export default function TestDataGen() {
                       ? `${selectedCount} field${selectedCount !== 1 ? 's' : ''} will vary`
                       : ''}
               </Label>
-            </Toolbar>
+            </FlexBox>
           </FlexBox>
         </Card>
       )}

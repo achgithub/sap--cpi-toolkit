@@ -50,6 +50,7 @@ const (
 	ModeRandom     = "random"
 	ModeFixed      = "fixed"
 	ModeExpression = "expression"
+	ModeLookup     = "lookup"
 )
 
 // --- Public types ---
@@ -78,18 +79,20 @@ type CSVTemplateResult struct {
 
 // FieldConfig describes how to generate values for one field.
 type FieldConfig struct {
-	Path          string  `json:"path"`
-	Type          string  `json:"type"`
-	Mode          string  `json:"mode"`                     // "random" | "fixed" | "expression"
-	Value         string  `json:"value,omitempty"`          // fixed mode
-	Expression    string  `json:"expression,omitempty"`     // expression mode template
-	Min           float64 `json:"min,omitempty"`            // integer / decimal random
-	Max           float64 `json:"max,omitempty"`
-	DecimalPlaces int     `json:"decimal_places,omitempty"` // decimal random
-	DateStart     string  `json:"date_start,omitempty"`     // date / datetime random
-	DateEnd       string  `json:"date_end,omitempty"`
-	Prefix        string  `json:"prefix,omitempty"` // string random
-	Length        int     `json:"length,omitempty"`
+	Path          string   `json:"path"`
+	Type          string   `json:"type"`
+	Mode          string   `json:"mode"`                     // "random" | "fixed" | "expression" | "lookup"
+	Value         string   `json:"value,omitempty"`          // fixed mode
+	Expression    string   `json:"expression,omitempty"`     // expression mode template
+	Min           float64  `json:"min,omitempty"`            // integer / decimal random
+	Max           float64  `json:"max,omitempty"`
+	DecimalPlaces int      `json:"decimal_places,omitempty"` // decimal random
+	DateStart     string   `json:"date_start,omitempty"`     // date / datetime random
+	DateEnd       string   `json:"date_end,omitempty"`
+	Prefix        string   `json:"prefix,omitempty"` // string random
+	Length        int      `json:"length,omitempty"`
+	LookupTableID string   `json:"lookup_table_id,omitempty"` // lookup mode — resolved by handler
+	LookupValues  []string `json:"lookup_values,omitempty"`   // lookup mode — populated before Generate is called
 }
 
 // GenerateRequest is the payload for Generate.
@@ -372,6 +375,105 @@ func isRepeatPoint(path string, repeatPoints []string) bool {
 	return false
 }
 
+// GenerateSingle produces one XML document from the request and returns it as a string.
+func GenerateSingle(req GenerateRequest) (string, error) {
+	req.Count = 1
+	return generateDoc(req, nil, 0, rand.New(rand.NewSource(time.Now().UnixNano()))) //nolint:gosec
+}
+
+// GenerateBatch produces all documents as a slice of XML strings.
+// Used by the "Save to Assets" flow so each document can be stored individually.
+func GenerateBatch(req GenerateRequest) ([]string, error) {
+	if strings.TrimSpace(req.CSVData) != "" && hasDocColumn(req.CSVData) {
+		return nil, fmt.Errorf("batch save is not supported for nested CSV mode; use the ZIP download instead")
+	}
+
+	var csvColumns map[string][]string
+	csvRows := 0
+	if strings.TrimSpace(req.CSVData) != "" {
+		var err error
+		csvColumns, csvRows, err = parseCSV(req.CSVData)
+		if err != nil {
+			return nil, fmt.Errorf("CSV: %w", err)
+		}
+	}
+
+	count := req.Count
+	if csvRows > 0 {
+		count = csvRows
+	}
+	if count <= 0 {
+		count = 1
+	}
+	if count > 1000 {
+		count = 1000
+	}
+
+	rng := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec
+	docs := make([]string, 0, count)
+
+	for i := 0; i < count; i++ {
+		csvRow := make(map[string]string)
+		for path, vals := range csvColumns {
+			if i < len(vals) {
+				csvRow[path] = vals[i]
+			}
+		}
+		xml, err := generateDoc(req, csvRow, i, rng)
+		if err != nil {
+			return nil, err
+		}
+		docs = append(docs, xml)
+	}
+	return docs, nil
+}
+
+// generateDoc produces one XML document for document index i, seeding computed
+// values from csvRow first (may be nil), then applying field configs.
+func generateDoc(req GenerateRequest, csvRow map[string]string, i int, rng *rand.Rand) (string, error) {
+	root, err := parseXML(req.Template)
+	if err != nil {
+		return "", fmt.Errorf("parse template: %w", err)
+	}
+
+	computed := make(map[string]string)
+	for path, val := range csvRow {
+		computed[path] = val
+	}
+
+	// Step 1: random / fixed / lookup fields (CSV takes precedence)
+	for _, fc := range req.Fields {
+		if fc.Mode == ModeExpression {
+			continue
+		}
+		if _, fromCSV := computed[fc.Path]; fromCSV {
+			continue
+		}
+		if fc.Mode == ModeLookup && len(fc.LookupValues) > 0 {
+			computed[fc.Path] = fc.LookupValues[i%len(fc.LookupValues)]
+			continue
+		}
+		computed[fc.Path] = generateValue(fc, rng)
+	}
+
+	// Step 2: expression fields
+	for _, fc := range req.Fields {
+		if fc.Mode != ModeExpression {
+			continue
+		}
+		computed[fc.Path] = resolveExpression(fc.Expression, computed, fc, rng)
+	}
+
+	for path, val := range computed {
+		segs := strings.Split(path, ".")
+		if len(segs) > 1 && segs[0] == root.Name {
+			applyValue(root, segs[1:], val)
+		}
+	}
+
+	return `<?xml version="1.0" encoding="UTF-8"?>` + "\n" + renderNode(root, 0), nil
+}
+
 // --- Flat CSV generation (existing behaviour) ---
 
 func generateFlat(req GenerateRequest) ([]byte, error) {
@@ -402,47 +504,19 @@ func generateFlat(req GenerateRequest) ([]byte, error) {
 	zw := zip.NewWriter(&buf)
 
 	for i := 0; i < count; i++ {
-		root, err := parseXML(req.Template)
-		if err != nil {
-			return nil, fmt.Errorf("parse template: %w", err)
-		}
-
-		// Step 1: seed computed map with CSV values for this row
-		computed := make(map[string]string)
+		// Build CSV row map for this index
+		csvRow := make(map[string]string)
 		for path, vals := range csvColumns {
 			if i < len(vals) {
-				computed[path] = vals[i]
+				csvRow[path] = vals[i]
 			}
 		}
 
-		// Step 2: random / fixed fields (CSV takes precedence)
-		for _, fc := range req.Fields {
-			if fc.Mode == ModeExpression {
-				continue
-			}
-			if _, fromCSV := computed[fc.Path]; fromCSV {
-				continue
-			}
-			computed[fc.Path] = generateValue(fc, rng)
+		xmlContent, err := generateDoc(req, csvRow, i, rng)
+		if err != nil {
+			return nil, err
 		}
 
-		// Step 3: expression fields
-		for _, fc := range req.Fields {
-			if fc.Mode != ModeExpression {
-				continue
-			}
-			computed[fc.Path] = resolveExpression(fc.Expression, computed, fc, rng)
-		}
-
-		// Apply all computed values to the XML tree
-		for path, val := range computed {
-			segs := strings.Split(path, ".")
-			if len(segs) > 1 && segs[0] == root.Name {
-				applyValue(root, segs[1:], val)
-			}
-		}
-
-		xmlContent := `<?xml version="1.0" encoding="UTF-8"?>` + "\n" + renderNode(root, 0)
 		fw, err := zw.Create(fmt.Sprintf("record_%04d.xml", i+1))
 		if err != nil {
 			return nil, fmt.Errorf("zip create: %w", err)
