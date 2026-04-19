@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sftp-adapter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sftp-adapter
+  template:
+    metadata:
+      labels:
+        app: sftp-adapter
+    spec:
+      initContainers:
+        - name: wait-for-adapter-control
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z adapter-control 8083; do echo waiting for adapter-control; sleep 2; done']
+      containers:
+        - name: sftp-adapter
+          image: ghcr.io/achgithub/cpi-toolkit-sftp-adapter:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 22
+          env:
+            - name: ADAPTER_ID
+              value: sftp
+            - name: CONTROL_PLANE_URL
+              value: http://adapter-control:8083
+            - name: SFTP_ROOT_DIR
+              value: /data/sftp
+            - name: HOST_KEY_PATH
+              value: /data/host_key
+          resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
+            limits:
+              memory: 32Mi
+          readinessProbe:
+            tcpSocket:
+              port: 22
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: sftp-data
+              mountPath: /data
+      volumes:
+        - name: sftp-data
+          # Shares the PVC written by adapter-control. Works on single-node k8s
+          # (Docker Desktop). For multi-node, replace with a ReadWriteMany volume.
+          persistentVolumeClaim:
+            claimName: sftp-data

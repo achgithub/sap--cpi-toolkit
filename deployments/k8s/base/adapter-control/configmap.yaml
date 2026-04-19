@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adapter-control-config
+data:
+  PORT: "8083"
+  SFTP_DATA_ROOT: /sftp-data/sftp

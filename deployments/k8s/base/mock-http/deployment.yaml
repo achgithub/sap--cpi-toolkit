@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-http
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-http
+  template:
+    metadata:
+      labels:
+        app: mock-http
+    spec:
+      containers:
+        - name: mock-http
+          image: ghcr.io/achgithub/cpi-toolkit-mock-http:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ADAPTER_ID
+              value: mock-http
+            - name: CONTROL_PLANE_URL
+              value: http://adapter-control:8083
+          resources:
+            requests:
+              memory: 16Mi
+              cpu: 10m
+            limits:
+              memory: 32Mi
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5

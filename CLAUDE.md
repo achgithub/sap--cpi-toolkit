@@ -3,7 +3,10 @@
 ## Project Overview
 
 SAP developer toolkit built with Go + React (@ui5/webcomponents-react) + PostgreSQL.
-Two deployment targets: local Docker Compose and SAP BTP Kyma.
+Three deployment targets:
+- **Dev** — Docker Compose (local Mac, each developer)
+- **QA** — Cloud Kubernetes (shared team environment, platform TBD — EKS, AKS, or BTP Kyma)
+- **Prod** — Same platform as QA (promote same images, same manifests)
 
 See `docs/architecture.md` for full architecture. See `docs/features.md` for feature specs.
 
@@ -56,11 +59,12 @@ https://github.com/achgithub/sap--cpi-toolkit
 - Write code on Mac (Claude does this)
 - Commit to Git on Mac (Claude does this)
 - Build and test via Docker Compose on Mac (user does this)
-- Deploy to SAP BTP Kyma via `kubectl apply` (user does this)
+- Deploy to QA/Prod Kubernetes via `scripts/push-images.sh` + `kubectl apply` (user does this)
 
 Go and npm are NOT needed directly — all compilation happens inside Docker multi-stage builds.
+Kubernetes does NOT need to be enabled in Docker Desktop for local dev.
 
-## Build & Test Commands (run on Mac)
+## Dev — Docker Compose (local)
 
 ```bash
 # Full stack — builds all images and starts services
@@ -78,3 +82,26 @@ docker compose -f deployments/local/docker-compose.yml down
 ```
 
 Open http://localhost:3000 after stack is up.
+
+## QA / Prod — Kubernetes
+
+Images are tagged for `ghcr.io/achgithub/cpi-toolkit-*:latest`.
+
+```bash
+# Build images locally (no push — for testing manifests)
+scripts/build-images.sh
+
+# Build and push to ghcr.io (required before deploying to cloud)
+scripts/build-images.sh
+scripts/push-images.sh
+
+# Deploy to QA or Prod (platform TBD)
+kubectl apply -k deployments/k8s/local     # local k8s (if needed)
+kubectl apply -k deployments/k8s/kyma      # BTP Kyma
+```
+
+### Storage classes (set per environment in kustomize overlay)
+- **Local kind** (if used): `local-path`
+- **Azure AKS**: `managed-csi`
+- **AWS EKS**: `gp2`
+- **BTP Kyma**: depends on underlying cloud

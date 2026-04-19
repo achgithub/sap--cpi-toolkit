@@ -1,23 +1,26 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# ── Docker Desktop Kubernetes overlay ────────────────────────────────────────
+# ── Local / ad-hoc Kubernetes overlay ────────────────────────────────────────
+#
+# Use this overlay when you need to run the stack in a local Kubernetes cluster
+# (e.g. kind, minikube). For day-to-day development use Docker Compose instead.
 #
 # Prerequisites:
-#   1. Enable Kubernetes in Docker Desktop → Settings → Kubernetes
-#   2. Install nginx ingress controller (one-time):
+#   1. A running cluster with kubectl configured
+#   2. nginx ingress controller installed:
 #        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.12.1/deploy/static/provider/cloud/deploy.yaml
-#        kubectl wait --namespace ingress-nginx --for=condition=ready pod --selector=app.kubernetes.io/component=controller --timeout=120s
-#
-# Build images (run from repo root):
-#   docker build -f Dockerfile.portal       -t sap-cpi-toolkit/portal:latest .
-#   docker build -f Dockerfile.worker       -t sap-cpi-toolkit/worker:latest .
-#   docker build -f groovy-runner/Dockerfile -t sap-cpi-toolkit/groovy-runner:latest groovy-runner/
+#        kubectl wait --namespace ingress-nginx --for=condition=ready pod \
+#          --selector=app.kubernetes.io/component=controller --timeout=120s
+#   3. Images built and available:  scripts/build-images.sh
 #
 # Deploy:
 #   kubectl apply -k deployments/k8s/local
 #
-# Access:  http://localhost
+# Access:
+#   Portal:    http://localhost
+#   mock-http: http://localhost:9080/{adapterID}/...
+#   SFTP:      sftp -P 2222 <user>@localhost
 #
 # Tear down:
 #   kubectl delete -k deployments/k8s/local
@@ -26,3 +29,6 @@ kind: Kustomization
 resources:
   - ../base
   - ingress.yaml
+
+patches:
+  - path: patch-storage.yaml

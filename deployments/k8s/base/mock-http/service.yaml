@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-http
+spec:
+  # LoadBalancer exposes port 9080 on localhost (matches docker-compose mapping)
+  type: LoadBalancer
+  selector:
+    app: mock-http
+  ports:
+    - port: 9080
+      targetPort: 8080

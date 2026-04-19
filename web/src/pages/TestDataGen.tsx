@@ -250,11 +250,12 @@ function TypeSelector({ value, onChange }: { value: string; onChange: (t: string
 
 // ── Field config panel ───────────────────────────────────────────────────────
 
-function FieldConfigPanel({ config, allFields, lookupTables, onChange }: {
+function FieldConfigPanel({ config, allFields, lookupTables, onChange, refreshLookupTables }: {
   config: FieldConfig
   allFields: Field[]
   lookupTables: LookupTable[]
   onChange: (u: Partial<FieldConfig>) => void
+  refreshLookupTables: () => void
 }) {
   const num = (s: string) => parseFloat(s) || 0
   const int = (s: string) => parseInt(s, 10) || 0
@@ -274,7 +275,10 @@ function FieldConfigPanel({ config, allFields, lookupTables, onChange }: {
         <SegmentedButton
           onSelectionChange={(e) => {
             const m = segItem(e as unknown as Event)?.getAttribute('data-mode')
-            if (m === 'random' || m === 'fixed' || m === 'expression' || m === 'lookup') onChange({ mode: m })
+            if (m === 'random' || m === 'fixed' || m === 'expression' || m === 'lookup') {
+              if (m === 'lookup') refreshLookupTables()
+              onChange({ mode: m })
+            }
           }}
         >
           <SegmentedButtonItem data-mode="random"     selected={config.mode === 'random'}>Random</SegmentedButtonItem>
@@ -445,7 +449,7 @@ function FieldConfigPanel({ config, allFields, lookupTables, onChange }: {
 
 // ── Field row ────────────────────────────────────────────────────────────────
 
-function FieldRow({ field, isSelected, isCsvCovered, isRepeat, config, allFields, lookupTables, onToggle, onConfigChange }: {
+function FieldRow({ field, isSelected, isCsvCovered, isRepeat, config, allFields, lookupTables, onToggle, onConfigChange, refreshLookupTables }: {
   field: Field
   isSelected: boolean
   isCsvCovered: boolean
@@ -455,6 +459,7 @@ function FieldRow({ field, isSelected, isCsvCovered, isRepeat, config, allFields
   lookupTables: LookupTable[]
   onToggle: () => void
   onConfigChange: (u: Partial<FieldConfig>) => void
+  refreshLookupTables: () => void
 }) {
   return (
     <div style={{
@@ -480,7 +485,7 @@ function FieldRow({ field, isSelected, isCsvCovered, isRepeat, config, allFields
 
       {isSelected && !isCsvCovered && (
         <div style={{ paddingLeft: '2rem' }}>
-          <FieldConfigPanel config={config} allFields={allFields} lookupTables={lookupTables} onChange={onConfigChange} />
+          <FieldConfigPanel config={config} allFields={allFields} lookupTables={lookupTables} onChange={onConfigChange} refreshLookupTables={refreshLookupTables} />
         </div>
       )}
       {isSelected && isCsvCovered && (
@@ -541,12 +546,16 @@ export default function TestDataGen() {
 
   const csvUploadRef = useRef<HTMLInputElement>(null)
 
-  // Load lookup tables once on mount (best-effort — generator still works without them).
-  useEffect(() => {
+  // Load lookup tables on mount and when needed
+  const refreshLookupTables = () => {
     fetch('/api/worker/testdata/lookup-tables')
       .then(r => r.ok ? r.json() : [])
       .then((data: LookupTable[]) => setLookupTables(data))
       .catch(() => {})
+  }
+
+  useEffect(() => {
+    refreshLookupTables()
   }, [])
 
   const { post, loading: analysing, error: analyseError } = useWorker<{ content: string; input_type: string }, AnalyseResponse>()
@@ -878,6 +887,7 @@ export default function TestDataGen() {
                 lookupTables={lookupTables}
                 onToggle={() => toggleField(field.path)}
                 onConfigChange={(upd) => updateConfig(field.path, upd)}
+                refreshLookupTables={refreshLookupTables}
               />
             ))}
           </FlexBox>

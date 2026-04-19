@@ -18,3 +18,11 @@ resources:
   - portal/service.yaml
   - groovy-runner/deployment.yaml
   - groovy-runner/service.yaml
+  - adapter-control/pvc.yaml
+  - adapter-control/configmap.yaml
+  - adapter-control/deployment.yaml
+  - adapter-control/service.yaml
+  - mock-http/deployment.yaml
+  - mock-http/service.yaml
+  - sftp-adapter/deployment.yaml
+  - sftp-adapter/service.yaml

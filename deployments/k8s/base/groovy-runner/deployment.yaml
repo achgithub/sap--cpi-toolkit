@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: groovy-runner
-          image: sap-cpi-toolkit/groovy-runner:latest
+          image: ghcr.io/achgithub/cpi-toolkit-groovy-runner:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8082

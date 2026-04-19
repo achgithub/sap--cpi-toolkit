@@ -9,3 +9,4 @@ data:
   AUTH_BYPASS_ENABLED: "true"
   WORKER_INTERNAL_URL: http://worker:8081
   GROOVY_INTERNAL_URL: http://groovy-runner:8082
+  ADAPTER_CONTROL_INTERNAL_URL: http://adapter-control:8083

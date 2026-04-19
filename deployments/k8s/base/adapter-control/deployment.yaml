@@ -1,42 +1,32 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: portal
+  name: adapter-control
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: portal
+      app: adapter-control
   template:
     metadata:
       labels:
-        app: portal
+        app: adapter-control
     spec:
       containers:
-        - name: portal
-          image: ghcr.io/achgithub/cpi-toolkit-portal:latest
+        - name: adapter-control
+          image: ghcr.io/achgithub/cpi-toolkit-adapter-control:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 3000
+            - containerPort: 8083
           envFrom:
             - configMapRef:
-                name: portal-config
+                name: adapter-control-config
           env:
-            - name: IAS_CLIENT_ID
+            - name: DB_URL
               valueFrom:
                 secretKeyRef:
-                  name: ias
-                  key: IAS_CLIENT_ID
-            - name: IAS_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: ias
-                  key: IAS_CLIENT_SECRET
-            - name: IAS_TENANT_URL
-              valueFrom:
-                secretKeyRef:
-                  name: ias
-                  key: IAS_TENANT_URL
+                  name: postgres
+                  key: DB_URL
           resources:
             requests:
               memory: 32Mi
@@ -45,11 +35,18 @@ spec:
               memory: 128Mi
           readinessProbe:
             tcpSocket:
-              port: 3000
+              port: 8083
             initialDelaySeconds: 3
             periodSeconds: 5
           livenessProbe:
             tcpSocket:
-              port: 3000
+              port: 8083
             initialDelaySeconds: 10
             periodSeconds: 15
+          volumeMounts:
+            - name: sftp-data
+              mountPath: /sftp-data
+      volumes:
+        - name: sftp-data
+          persistentVolumeClaim:
+            claimName: sftp-data
