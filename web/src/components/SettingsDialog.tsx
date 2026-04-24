@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import {
   Button,
+  CheckBox,
   Dialog,
   Bar,
   Input,
@@ -18,7 +19,8 @@ import { type CPIInstance, type ServiceKey, type SystemType } from '../context/C
 
 const SYSTEM_TYPES: SystemType[] = ['TRL', 'SBX', 'DEV', 'QAS', 'PPD', 'PRD']
 
-const API = '/api/worker/cpi-instances'
+const API          = '/api/worker/cpi-instances'
+const SETTINGS_API = '/api/worker/settings'
 
 async function apiFetch(path: string, opts?: RequestInit) {
   const res = await fetch(API + path, opts)
@@ -26,6 +28,20 @@ async function apiFetch(path: string, opts?: RequestInit) {
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || res.statusText)
   return data
+}
+
+async function fetchSettings(): Promise<Record<string, string>> {
+  const res = await fetch(SETTINGS_API)
+  if (!res.ok) return {}
+  return res.json()
+}
+
+async function putSetting(key: string, value: string) {
+  await fetch(SETTINGS_API, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [key]: value }),
+  })
 }
 
 function parseKey(text: string): ServiceKey | null {
@@ -45,6 +61,7 @@ interface Props {
 
 export default function SettingsDialog({ open, onClose }: Props) {
   const [instances, setInstances] = useState<CPIInstance[]>([])
+  const [logging,   setLogging]   = useState(false)
   const [view, setView] = useState<'list' | 'form'>('list')
   const [editing, setEditing] = useState<CPIInstance | null>(null)
   const [name, setName] = useState('')
@@ -59,6 +76,7 @@ export default function SettingsDialog({ open, onClose }: Props) {
   useEffect(() => {
     if (open) {
       load()
+      fetchSettings().then(s => setLogging(s['logging'] === 'true'))
       setView('list')
       setError('')
     }
@@ -182,6 +200,23 @@ export default function SettingsDialog({ open, onClose }: Props) {
 
         {view === 'list' && (
           <div>
+            <div style={{ marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid var(--sapList_BorderColor)' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'var(--sapFontFamily)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                General
+              </div>
+              <CheckBox
+                text="Logging"
+                checked={logging}
+                onChange={(e) => {
+                  const val = (e.target as any).checked
+                  setLogging(val)
+                  putSetting('logging', val ? 'true' : 'false')
+                }}
+              />
+            </div>
+            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'var(--sapFontFamily)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              CPI Instances
+            </div>
             {instances.length === 0 ? (
               <p style={{ color: 'var(--sapContent_LabelColor)', textAlign: 'center', marginTop: '2rem', fontFamily: 'var(--sapFontFamily)' }}>
                 No CPI instances configured. Click <strong>Add Instance</strong> to get started.

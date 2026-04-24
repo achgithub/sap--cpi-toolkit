@@ -44,6 +44,27 @@ CREATE TABLE IF NOT EXISTS w_cpi_instances (
 );
 
 ALTER TABLE w_cpi_instances ADD COLUMN IF NOT EXISTS system_type TEXT NOT NULL DEFAULT 'TRL';
+
+CREATE TABLE IF NOT EXISTS w_settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS w_monitoring_tiles (
+    id          TEXT PRIMARY KEY,
+    instance_id TEXT NOT NULL DEFAULT '',
+    name        TEXT NOT NULL,
+    time_range  TEXT NOT NULL DEFAULT 'Past Hour',
+    status      TEXT NOT NULL DEFAULT '',
+    package_id  TEXT NOT NULL DEFAULT '',
+    iflow_id    TEXT NOT NULL DEFAULT '',
+    sort_order  INTEGER NOT NULL DEFAULT 0,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE w_monitoring_tiles ADD COLUMN IF NOT EXISTS package_id  TEXT NOT NULL DEFAULT '';
+ALTER TABLE w_monitoring_tiles ADD COLUMN IF NOT EXISTS iflow_id    TEXT NOT NULL DEFAULT '';
+ALTER TABLE w_monitoring_tiles ADD COLUMN IF NOT EXISTS instance_id TEXT NOT NULL DEFAULT '';
 `
 
 func initWorkerDB(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {
