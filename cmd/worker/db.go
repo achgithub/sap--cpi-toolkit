@@ -32,6 +32,18 @@ CREATE TABLE IF NOT EXISTS w_lookup_tables (
     values     JSONB NOT NULL DEFAULT '[]',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS w_cpi_instances (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    system_type TEXT NOT NULL DEFAULT 'TRL',
+    api_key     JSONB,
+    pi_key      JSONB,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE w_cpi_instances ADD COLUMN IF NOT EXISTS system_type TEXT NOT NULL DEFAULT 'TRL';
 `
 
 func initWorkerDB(ctx context.Context, dbURL string) (*pgxpool.Pool, error) {

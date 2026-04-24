@@ -36,6 +36,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/sftp/upload", h.handleSFTPUpload)
 	mux.HandleFunc("/sftp/move", h.handleSFTPMove)
 	mux.HandleFunc("/sftp/chmod", h.handleSFTPChmod)
+	mux.HandleFunc("/sftp/read", h.handleSFTPRead)
 	mux.HandleFunc("/system/log", h.handleSystemLog)
 	mux.HandleFunc("/assets", h.handleAssets)
 	mux.HandleFunc("/assets/", h.handleAssetDetail)
@@ -642,6 +643,47 @@ func (h *Handler) handleSFTPUpload(w http.ResponseWriter, r *http.Request) {
 		os.WriteFile(dest, data, 0644) //nolint:errcheck
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+// handleSFTPRead returns the text content of a single file (up to 256 KB).
+func (h *Handler) handleSFTPRead(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		jsonError(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	rawPath := r.URL.Query().Get("path")
+	if rawPath == "" {
+		jsonError(w, "path required", http.StatusBadRequest)
+		return
+	}
+	real, err := h.sftpRealPath(rawPath)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	info, err := os.Stat(real)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	if info.IsDir() {
+		jsonError(w, "path is a directory", http.StatusBadRequest)
+		return
+	}
+	const maxBytes = 256 * 1024
+	f, err := os.Open(real)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, maxBytes))
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	truncated := info.Size() > maxBytes
+	writeJSON(w, map[string]any{"content": string(data), "truncated": truncated, "size": info.Size()})
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

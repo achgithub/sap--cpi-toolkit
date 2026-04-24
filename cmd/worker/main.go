@@ -63,6 +63,9 @@ func main() {
 		// HTTP client collections (persisted in Postgres)
 		registerCollectionRoutes(mux, pool)
 
+		// CPI instance configuration (persisted in Postgres)
+		registerCPIInstanceRoutes(mux, pool)
+
 		addr := ":" + port
 		log.Printf("[worker] listening on %s", addr)
 		if err := http.ListenAndServe(addr, mux); err != nil {

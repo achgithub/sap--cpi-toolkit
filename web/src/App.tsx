@@ -1,12 +1,17 @@
 import React, { useState, useCallback } from 'react'
 import {
   ShellBar,
-  ShellBarItem,
+  Avatar,
   TabContainer,
   Tab,
   FlexBox,
   FlexBoxDirection,
+  FlexBoxAlignItems,
+  Label,
+  Select,
+  Option,
 } from '@ui5/webcomponents-react'
+import { useCPIInstance } from './context/CPIInstanceContext'
 
 import XMLFormatter from './pages/XMLFormatter'
 import JSONFormatter from './pages/JSONFormatter'
@@ -20,10 +25,13 @@ import GroovyIDE from './pages/GroovyIDE'
 import EDITools from './pages/EDITools'
 import ScriptLibrary from './pages/ScriptLibrary'
 import HttpClient from './pages/HttpClient'
+import IFlowScaffold from './pages/IFlowScaffold'
+import Monitoring from './pages/Monitoring'
 import MockService from './pages/MockService'
 import SFTPServer from './pages/SFTPServer'
 import AssetStore from './pages/AssetStore'
 import { type SampleInput } from './data/scriptLibrary'
+import SettingsDialog from './components/SettingsDialog'
 
 type ToolTab =
   | 'xml-formatter'
@@ -37,6 +45,8 @@ type ToolTab =
   | 'edi'
   | 'library'
   | 'http-client'
+  | 'iflow-scaffold'
+  | 'monitoring'
   | 'mock'
   | 'sftp'
   | 'assets'
@@ -44,9 +54,11 @@ type ToolTab =
 
 const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
   {
-    label: 'HTTP Client',
+    label: 'CPI',
     tabs: [
-      { id: 'http-client', label: 'HTTP Client' },
+      { id: 'http-client',    label: 'HTTP Client'   },
+      { id: 'iflow-scaffold', label: 'iFlow Scaffold' },
+      { id: 'monitoring',     label: 'Monitoring'    },
     ],
   },
   {
@@ -93,6 +105,8 @@ const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
 export default function App() {
   const [activeTab,    setActiveTab]    = useState<ToolTab>('xml-formatter')
   const [ideInject,    setIdeInject]    = useState<{ body: string; sample?: SampleInput; key: number } | undefined>()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const { instances, selectedId, setSelectedId, refresh } = useCPIInstance()
 
   const loadInIDE = useCallback((body: string, sample?: SampleInput) => {
     setIdeInject(prev => ({ body, sample, key: (prev?.key ?? 0) + 1 }))
@@ -105,9 +119,41 @@ export default function App() {
         primaryTitle="SAP CPI Toolkit"
         secondaryTitle="Developer Tools"
         logo={<img alt="SAP" src="https://www.sap.com/dam/application/shared/logos/sap-logo-svg.svg" style={{ height: '1.5rem' }} />}
+        onProfileClick={() => setSettingsOpen(true)}
+        accessibilityAttributes={{ profile: { name: 'Settings' } }}
       >
-        <ShellBarItem icon="settings" text="Settings" />
+        <Avatar slot="profile" icon="action-settings" accessibleName="Settings" />
       </ShellBar>
+      <SettingsDialog open={settingsOpen} onClose={() => { setSettingsOpen(false); refresh() }} />
+
+      <FlexBox
+        alignItems={FlexBoxAlignItems.Center}
+        style={{
+          padding: '0.25rem 1rem',
+          gap: '0.5rem',
+          borderBottom: '1px solid var(--sapList_BorderColor)',
+          background: 'var(--sapGroup_TitleBackground)',
+          minHeight: '2.25rem',
+        }}
+      >
+        <Label style={{ fontFamily: 'var(--sapFontFamily)', whiteSpace: 'nowrap' }}>Working with:</Label>
+        {instances.length === 0 ? (
+          <span style={{ fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'var(--sapFontFamily)' }}>
+            No CPI instances configured — add one in Settings
+          </span>
+        ) : (
+          <Select
+            style={{ minWidth: '14rem' }}
+            onChange={(e) => setSelectedId((e.detail as any).selectedOption.value)}
+          >
+            {instances.map(inst => (
+              <Option key={inst.id} value={inst.id} selected={selectedId === inst.id}>
+                {inst.name} ({inst.system_type})
+              </Option>
+            ))}
+          </Select>
+        )}
+      </FlexBox>
 
       <TabContainer
         onTabSelect={(e) => {
@@ -155,6 +201,8 @@ export default function App() {
           ['edi',            <EDITools />],
           ['library',        <ScriptLibrary onLoadInIDE={loadInIDE} />],
           ['http-client',    <HttpClient />],
+          ['iflow-scaffold', <IFlowScaffold />],
+          ['monitoring',     <Monitoring />],
           ['mock',           <MockService />],
           ['sftp',           <SFTPServer />],
         ] as [ToolTab, React.ReactNode][]).map(([id, node]) => (

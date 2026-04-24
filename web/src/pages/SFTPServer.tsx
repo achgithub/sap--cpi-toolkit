@@ -360,6 +360,11 @@ export default function SFTPServer() {
   const [newFileContent, setNewFileContent] = useState('')
   const [newFolderName,  setNewFolderName]  = useState('')
 
+  const [previewFile,    setPreviewFile]    = useState<SFTPEntry | null>(null)
+  const [previewContent, setPreviewContent] = useState('')
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewTrunc,   setPreviewTrunc]   = useState(false)
+
   const fileInputRef  = useRef<HTMLInputElement>(null)
   // tracks the item being internally dragged (null when dragging from desktop)
   const dragItemRef   = useRef<SFTPEntry | null>(null)
@@ -437,13 +442,23 @@ export default function SFTPServer() {
   const navigate = (path: string) => {
     setCurrentPath(path)
     setSelectedPath(null)
+    setPreviewFile(null); setPreviewContent('')
     setShowNewFile(false)
     setShowNewFolder(false)
     setNewFileName(''); setNewFileContent(''); setNewFolderName('')
   }
 
-  const toWindowsPath = (p: string) =>
-    (p === '/' ? '\\' : p.replace(/\//g, '\\'))
+  const openPreview = async (file: SFTPEntry) => {
+    if (previewFile?.path === file.path) { setPreviewFile(null); setPreviewContent(''); return }
+    setPreviewFile(file); setPreviewContent(''); setPreviewLoading(true); setPreviewTrunc(false)
+    try {
+      const data = await apiFetch(`/sftp/read?path=${encodeURIComponent(file.path)}`)
+      setPreviewContent(data.content)
+      setPreviewTrunc(data.truncated)
+    } catch (e: any) { setPreviewContent(`Error: ${e.message}`) }
+    finally { setPreviewLoading(false) }
+  }
+
 
   const uploadFilesTo = async (fileList: File[], targetPath: string) => {
     const fd = new FormData()
@@ -627,7 +642,7 @@ export default function SFTPServer() {
       {/* ── File System ─────────────────────────────────────────────────────── */}
       <Card>
         {/* ── Navigation bar ─────────────────────────────────────────────── */}
-        {/* Path bar — shows selected item or current directory in CPI-friendly backslash format */}
+        {/* Path bar — shows selected item or current directory */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: '0.5rem',
           padding: '0 1rem', height: '2.25rem',
@@ -640,7 +655,7 @@ export default function SFTPServer() {
             color: selectedPath ? 'var(--sapTextColor)' : 'var(--sapContent_LabelColor)',
             letterSpacing: '0.01em', userSelect: 'all', flex: 1,
           }}>
-            {toWindowsPath(selectedPath ?? currentPath)}
+            {selectedPath ?? currentPath}
           </span>
         </div>
 
@@ -870,9 +885,9 @@ export default function SFTPServer() {
                 setIsDragging(true)
               }}
               onDragEnd={() => { dragItemRef.current = null; setDropTarget(null); setIsDragging(false) }}
-              onClick={() => setSelectedPath(file.path)}
+              onClick={() => { setSelectedPath(file.path); openPreview(file) }}
               style={{
-                ...ROW_STYLE, cursor: 'grab',
+                ...ROW_STYLE, cursor: 'pointer',
                 background: selectedPath === file.path ? 'var(--sapList_SelectionBackgroundColor)' : 'var(--sapList_Background)',
                 outline: selectedPath === file.path ? '2px solid var(--sapHighlightColor)' : 'none',
                 outlineOffset: '-2px',
@@ -892,7 +907,7 @@ export default function SFTPServer() {
               </span>
               <span style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.25rem' }}>
                 <button
-                  onClick={() => setMoveDialog({ entry: file })}
+                  onClick={e => { e.stopPropagation(); setMoveDialog({ entry: file }) }}
                   title="Move to…"
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem',
@@ -905,7 +920,7 @@ export default function SFTPServer() {
                   →
                 </button>
                 <button
-                  onClick={() => deleteEntry(file)}
+                  onClick={e => { e.stopPropagation(); deleteEntry(file) }}
                   title="Delete file"
                   style={{
                     background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem',
@@ -921,6 +936,7 @@ export default function SFTPServer() {
               </span>
             </div>
           ))}
+
 
           {/* Empty state */}
           {!loading && dirs.length === 0 && files.length === 0 && (
@@ -960,6 +976,70 @@ export default function SFTPServer() {
               Select an asset — it will be created as a file in the current folder.
             </div>
             <AssetPicker onSelect={loadAsset} onCancel={() => setShowAssetPicker(false)} />
+          </div>
+        </div>
+      )}
+
+      {/* ── File preview modal ─────────────────────────────────────────────── */}
+      {previewFile && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={e => { if (e.target === e.currentTarget) { setPreviewFile(null); setPreviewContent('') } }}
+        >
+          <div style={{
+            background: 'var(--sapBackgroundColor)',
+            border: '1px solid var(--sapList_BorderColor)',
+            borderRadius: '8px', width: '56rem', maxWidth: '90vw',
+            display: 'flex', flexDirection: 'column',
+            boxShadow: 'var(--sapContent_Shadow3)',
+            maxHeight: '80vh',
+          }}>
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+              padding: '0.75rem 1rem',
+              borderBottom: '1px solid var(--sapList_BorderColor)',
+              background: 'var(--sapShell_Background)',
+              borderRadius: '8px 8px 0 0',
+            }}>
+              <Icon name="document" style={{ fontSize: '1rem', color: 'var(--sapHighlightColor)', flexShrink: 0 }} />
+              <code style={{ fontFamily: 'monospace', fontSize: '0.85rem', flex: 1, wordBreak: 'break-all' }}>
+                {previewFile.path}
+              </code>
+              {previewTrunc && (
+                <span style={{ fontSize: '0.75rem', color: 'var(--sapCriticalTextColor)', flexShrink: 0 }}>
+                  truncated at 256 KB
+                </span>
+              )}
+              <button
+                onClick={() => { setPreviewFile(null); setPreviewContent('') }}
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  padding: '0.25rem 0.5rem', fontSize: '1.1rem', lineHeight: 1,
+                  color: 'var(--sapContent_LabelColor)', borderRadius: '4px', fontFamily: 'inherit',
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--sapTextColor)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--sapContent_LabelColor)' }}
+              >✕</button>
+            </div>
+            {/* Content */}
+            <div style={{ padding: '1rem', overflowY: 'auto', flex: 1 }}>
+              {previewLoading ? (
+                <span style={{ color: 'var(--sapContent_LabelColor)', fontSize: '0.875rem' }}>Loading…</span>
+              ) : (
+                <pre style={{
+                  margin: 0, fontFamily: 'monospace', fontSize: '0.8rem',
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                  color: 'var(--sapTextColor)',
+                }}>
+                  {previewContent || <span style={{ color: 'var(--sapContent_LabelColor)' }}>(empty file)</span>}
+                </pre>
+              )}
+            </div>
           </div>
         </div>
       )}
