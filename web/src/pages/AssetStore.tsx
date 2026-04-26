@@ -18,7 +18,7 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type AssetContentType = 'xml' | 'json' | 'edi' | 'csv' | 'text' | 'headers' | 'properties' | 'csrf-fetch'
+export type AssetContentType = 'xml' | 'json' | 'edi' | 'csv' | 'text' | 'req' | 'headers' | 'properties' | 'csrf-fetch'
 
 export interface Asset {
   id: string
@@ -53,12 +53,13 @@ const TYPE_META: Record<AssetContentType, { label: string; bg: string; color: st
   edi:          { label: 'EDI',        bg: '#8b5cf6', color: '#fff', isKV: false },
   csv:          { label: 'CSV',        bg: '#10b981', color: '#fff', isKV: false },
   text:         { label: 'Text',       bg: '#6b7280', color: '#fff', isKV: false },
+  req:          { label: 'Request',    bg: '#1d4ed8', color: '#fff', isKV: false },
   headers:      { label: 'Headers',    bg: '#0f766e', color: '#fff', isKV: true  },
   properties:   { label: 'Properties', bg: '#9333ea', color: '#fff', isKV: true  },
   'csrf-fetch': { label: 'CSRF Fetch', bg: '#b45309', color: '#fff', isKV: true  },
 }
 
-const TYPE_ORDER: AssetContentType[] = ['xml', 'json', 'edi', 'csv', 'text', 'headers', 'properties', 'csrf-fetch']
+const TYPE_ORDER: AssetContentType[] = ['xml', 'json', 'edi', 'csv', 'text', 'req', 'headers', 'properties', 'csrf-fetch']
 
 function TypeBadge({ type }: { type: AssetContentType }) {
   const m = TYPE_META[type] ?? TYPE_META.text
