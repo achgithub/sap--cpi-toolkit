@@ -45,11 +45,7 @@ export default function AuthHeaderGen() {
     const name = saveName.trim() || (selectedInstance ? `${selectedInstance.name} Auth Header` : 'Auth Header')
     setSaving(true); setSaveMsg('')
     try {
-      const reqJson = JSON.stringify({
-        method: 'POST', url: '', body: '',
-        headers: { Authorization: headerValue },
-      }, null, 2)
-      await saveAsset(name, reqJson, 'req')
+      await saveAsset(name, `Authorization: ${headerValue}`, 'headers')
       setSaveMsg(`Saved as "${name}"`)
       setTimeout(() => setSaveMsg(''), 3000)
     } catch (e: any) {
@@ -190,7 +186,7 @@ export default function AuthHeaderGen() {
       </Card>
 
       <MessageStrip design="Information" hideCloseButton style={{ fontSize: '0.8rem' }}>
-        Saved as a <strong>.req</strong> asset — load it in HTTP Client via <strong>Load request</strong> to auto-populate the Authorization header.
+        Saved as a <strong>headers</strong> asset — load it in HTTP Client via <strong>Load headers</strong> to auto-populate the Authorization header.
       </MessageStrip>
 
     </div>

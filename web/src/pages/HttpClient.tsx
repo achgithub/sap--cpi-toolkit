@@ -83,6 +83,7 @@ function TestTool() {
   const [showRespAssetSave,     setShowRespAssetSave]     = useState(false)
   const [showReqAssetPicker,    setShowReqAssetPicker]    = useState(false)
   const [showReqAssetSave,      setShowReqAssetSave]      = useState(false)
+  const [showHdrAssetPicker,    setShowHdrAssetPicker]    = useState(false)
 
   const requestAsJson = () => {
     const hdrs: Record<string, string> = {}
@@ -190,6 +191,26 @@ function TestTool() {
       {/* Headers + Body */}
       <Card style={{ flexShrink: 0 }}>
         <div style={{ padding: '0.75rem' }}>
+          <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}
+            style={{ marginBottom: '0.25rem' }}>
+            <Label>Headers</Label>
+            <Button design="Transparent" onClick={() => setShowHdrAssetPicker(true)}>
+              Load headers
+            </Button>
+          </FlexBox>
+          {showHdrAssetPicker && (
+            <AssetPickerPanel
+              defaultExtFilter="headers"
+              onSelect={(a) => {
+                const rows = a.content.split('\n')
+                  .filter(l => l.includes(':'))
+                  .map(l => { const i = l.indexOf(':'); return { key: l.slice(0, i).trim(), value: l.slice(i + 1).trim() } })
+                if (rows.length) setHeaders([...rows, { key: '', value: '' }])
+                setShowHdrAssetPicker(false)
+              }}
+              onClose={() => setShowHdrAssetPicker(false)}
+            />
+          )}
           <HeadersEditor headers={headers} onChange={setHeaders} />
           <div style={{ marginTop: '0.5rem' }}>
             <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}>
@@ -315,7 +336,6 @@ function HeadersEditor({ headers, onChange }: { headers: HeaderRow[]; onChange: 
 
   return (
     <div>
-      <Label>Headers</Label>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', marginTop: '0.25rem' }}>
         {headers.map((h, i) => (
           <FlexBox key={i} alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.4rem' }}>
@@ -337,14 +357,15 @@ function HeadersEditor({ headers, onChange }: { headers: HeaderRow[]; onChange: 
 
 const ASSET_EXT_OPTIONS = ['req', 'xml', 'json', 'text', 'edi', 'csv']
 
-function AssetPickerPanel({ onSelect, onClose }: {
+function AssetPickerPanel({ onSelect, onClose, defaultExtFilter = 'req' }: {
   onSelect: (a: Asset) => void
   onClose: () => void
+  defaultExtFilter?: string
 }) {
   const [assets,     setAssets]     = useState<Asset[]>([])
   const [loading,    setLoading]    = useState(true)
   const [nameFilter, setNameFilter] = useState('')
-  const [extFilter,  setExtFilter]  = useState('req')
+  const [extFilter,  setExtFilter]  = useState(defaultExtFilter)
 
   useEffect(() => {
     adapterFetch('/assets')
