@@ -33,6 +33,22 @@ import AssetStore from './pages/AssetStore'
 import { type SampleInput } from './data/scriptLibrary'
 import SettingsDialog from './components/SettingsDialog'
 
+function buildSuiteURL(apiUrl: string): string | null {
+  try {
+    const u    = new URL(apiUrl)
+    const parts = u.hostname.split('.')
+    const cfIdx = parts.indexOf('cfapps')
+    if (cfIdx < 1) return null
+    const tenant = parts[0]
+    const region = parts.slice(cfIdx).join('.')
+    const isTrial = u.hostname.includes('trial')
+    const middle = isTrial ? 'integrationsuite-trial' : 'integrationsuite'
+    return `https://${tenant}.${middle}.${region}/shell/home`
+  } catch {
+    return null
+  }
+}
+
 type ToolTab =
   | 'xml-formatter'
   | 'json-formatter'
@@ -106,7 +122,11 @@ export default function App() {
   const [activeTab,    setActiveTab]    = useState<ToolTab>('xml-formatter')
   const [ideInject,    setIdeInject]    = useState<{ body: string; sample?: SampleInput; key: number } | undefined>()
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const { instances, selectedId, setSelectedId, refresh } = useCPIInstance()
+  const { instances, selectedInstance, selectedId, setSelectedId, refresh } = useCPIInstance()
+
+  const suiteURL = selectedInstance?.api_key?.oauth?.url
+    ? buildSuiteURL(selectedInstance.api_key.oauth.url)
+    : null
 
   const loadInIDE = useCallback((body: string, sample?: SampleInput) => {
     setIdeInject(prev => ({ body, sample, key: (prev?.key ?? 0) + 1 }))
@@ -152,6 +172,25 @@ export default function App() {
               </Option>
             ))}
           </Select>
+        )}
+
+        {suiteURL && (
+          <>
+            <div style={{ width: '1px', height: '1.25rem', background: 'var(--sapList_BorderColor)', margin: '0 0.25rem' }} />
+            <a
+              href={suiteURL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.3rem',
+                fontSize: '0.8rem', color: 'var(--sapLinkColor)',
+                fontFamily: 'var(--sapFontFamily)', textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Integration Suite ↗
+            </a>
+          </>
         )}
       </FlexBox>
 
