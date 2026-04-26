@@ -19,6 +19,7 @@ import XSDGenerator from './pages/XSDGenerator'
 import Converter from './pages/Converter'
 import KeyGen from './pages/KeyGen'
 import CertGen from './pages/CertGen'
+import AuthHeaderGen from './pages/AuthHeaderGen'
 import TestDataGen from './pages/TestDataGen'
 import LookupTables from './pages/LookupTables'
 import GroovyIDE from './pages/GroovyIDE'
@@ -56,6 +57,7 @@ type ToolTab =
   | 'converter'
   | 'keygen'
   | 'certgen'
+  | 'auth-header'
   | 'testdata'
   | 'groovy'
   | 'edi'
@@ -97,8 +99,9 @@ const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
   {
     label: 'Keys & Certs',
     tabs: [
-      { id: 'keygen',  label: 'Key Generation' },
-      { id: 'certgen', label: 'Certificates'   },
+      { id: 'keygen',      label: 'Key Generation' },
+      { id: 'certgen',     label: 'Certificates'   },
+      { id: 'auth-header', label: 'Auth Header'    },
     ],
   },
   {
@@ -234,6 +237,7 @@ export default function App() {
           ['converter',      <Converter />],
           ['keygen',         <KeyGen />],
           ['certgen',        <CertGen />],
+          ['auth-header',    <AuthHeaderGen />],
           ['testdata',       <TestDataGen />],
           ['lookup-tables',  <LookupTables />],
           ['groovy',         <GroovyIDE inject={ideInject} />],
