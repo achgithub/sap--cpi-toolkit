@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import {
+  Bar,
   Button,
   Card,
+  Dialog,
   FlexBox,
   FlexBoxDirection,
   FlexBoxAlignItems,
@@ -331,7 +333,7 @@ function HeadersEditor({ headers, onChange }: { headers: HeaderRow[]; onChange: 
   )
 }
 
-// ── Asset picker panel ─────────────────────────────────────────────────────────
+// ── Asset picker modal ─────────────────────────────────────────────────────────
 
 const ASSET_EXT_OPTIONS = ['req', 'xml', 'json', 'text', 'edi', 'csv']
 
@@ -339,8 +341,8 @@ function AssetPickerPanel({ onSelect, onClose }: {
   onSelect: (a: Asset) => void
   onClose: () => void
 }) {
-  const [assets,    setAssets]    = useState<Asset[]>([])
-  const [loading,   setLoading]   = useState(true)
+  const [assets,     setAssets]     = useState<Asset[]>([])
+  const [loading,    setLoading]    = useState(true)
   const [nameFilter, setNameFilter] = useState('')
   const [extFilter,  setExtFilter]  = useState('req')
 
@@ -358,42 +360,66 @@ function AssetPickerPanel({ onSelect, onClose }: {
   })
 
   return (
-    <div style={{ border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
-      background: 'var(--sapList_Background)', padding: '0.5rem', marginBottom: '0.4rem' }}>
-      <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.4rem', marginBottom: '0.4rem' }}>
-        <Input placeholder="Filter by name…" value={nameFilter} style={{ flex: 1 }}
-          onInput={(e) => setNameFilter((e.target as any).value)} />
-        <Select style={{ width: '90px' }}
-          onChange={(e) => setExtFilter((e.detail.selectedOption as HTMLElement).dataset.value ?? '')}>
-          <Option data-value="" selected={extFilter === ''}>All</Option>
-          {ASSET_EXT_OPTIONS.map(ext => (
-            <Option key={ext} data-value={ext} selected={extFilter === ext}>.{ext}</Option>
+    <Dialog
+      open
+      headerText="Load Asset"
+      style={{ width: '480px' }}
+      footer={
+        <Bar endContent={
+          <Button design="Transparent" onClick={onClose}>Close</Button>
+        } />
+      }
+      onClose={onClose}
+    >
+      <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.4rem' }}>
+          <Input placeholder="Filter by name…" value={nameFilter} style={{ flex: 1 }}
+            onInput={(e) => setNameFilter((e.target as any).value)} />
+          <Select style={{ width: '95px' }}
+            onChange={(e) => setExtFilter((e.detail.selectedOption as HTMLElement).dataset.value ?? '')}>
+            <Option data-value="" selected={extFilter === ''}>All</Option>
+            {ASSET_EXT_OPTIONS.map(ext => (
+              <Option key={ext} data-value={ext} selected={extFilter === ext}>.{ext}</Option>
+            ))}
+          </Select>
+        </FlexBox>
+
+        {loading && (
+          <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--sapContent_LabelColor)',
+            fontFamily: 'var(--sapFontFamily)' }}>Loading…</p>
+        )}
+        {!loading && visible.length === 0 && (
+          <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--sapContent_LabelColor)',
+            fontFamily: 'var(--sapFontFamily)' }}>
+            No assets found. Save content as an asset from another tool first.
+          </p>
+        )}
+
+        <div style={{ maxHeight: '320px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+          {visible.map(a => (
+            <FlexBox key={a.id} alignItems={FlexBoxAlignItems.Center}
+              justifyContent={FlexBoxJustifyContent.SpaceBetween}
+              style={{
+                padding: '0.4rem 0.6rem', cursor: 'pointer', borderRadius: '4px',
+                border: '1px solid var(--sapList_BorderColor)',
+                background: 'var(--sapList_Background)',
+              }}
+              onClick={() => { onSelect(a); onClose() }}>
+              <span style={{ fontSize: '0.82rem', fontFamily: 'var(--sapFontFamily)' }}>{a.name}</span>
+              <span style={{
+                fontSize: '0.72rem', fontFamily: 'monospace',
+                color: 'var(--sapContent_LabelColor)',
+                background: 'var(--sapNeutralBackground)',
+                padding: '0.1rem 0.4rem', borderRadius: '3px',
+                border: '1px solid var(--sapNeutralBorderColor)',
+              }}>
+                .{a.content_type}
+              </span>
+            </FlexBox>
           ))}
-        </Select>
-        <Button design="Transparent" icon="decline" onClick={onClose} />
-      </FlexBox>
-      {loading && <p style={{ margin: 0, fontSize: '0.8rem' }}>Loading…</p>}
-      {!loading && visible.length === 0 && (
-        <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)' }}>
-          No assets found. Save content as an asset from another tool first.
-        </p>
-      )}
-      <div style={{ maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-        {visible.map(a => (
-          <FlexBox key={a.id} alignItems={FlexBoxAlignItems.Center}
-            justifyContent={FlexBoxJustifyContent.SpaceBetween}
-            style={{ padding: '0.3rem 0.4rem', cursor: 'pointer', borderRadius: '3px',
-              background: 'var(--sapList_Background)' }}
-            onClick={() => onSelect(a)}>
-            <span style={{ fontSize: '0.82rem' }}>{a.name}</span>
-            <span style={{ fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)',
-              background: 'var(--sapHighlightColor)', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>
-              {a.content_type}
-            </span>
-          </FlexBox>
-        ))}
+        </div>
       </div>
-    </div>
+    </Dialog>
   )
 }
 
