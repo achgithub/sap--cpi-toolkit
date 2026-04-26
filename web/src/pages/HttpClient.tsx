@@ -180,7 +180,7 @@ function TestTool() {
             />
           )}
           {urlWarnings.map((w, i) => (
-            <MessageStrip key={i} design="Warning" hideCloseButton style={{ fontSize: '0.8rem' }}>{w}</MessageStrip>
+            <MessageStrip key={i} design="Information" hideCloseButton style={{ fontSize: '0.8rem' }}>{w}</MessageStrip>
           ))}
           {reqError && <MessageStrip design="Negative" onClose={() => setReqError('')}>{reqError}</MessageStrip>}
         </div>
