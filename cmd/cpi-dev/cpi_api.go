@@ -28,6 +28,11 @@ type cachedToken struct {
 
 var globalTokenCache = &tokenCache{tokens: make(map[string]*cachedToken)}
 
+var (
+	apiHTTPClient   = &http.Client{Timeout: 30 * time.Second}
+	oauthHTTPClient = &http.Client{Timeout: 15 * time.Second}
+)
+
 func (tc *tokenCache) get(key string) (string, bool) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
@@ -75,7 +80,6 @@ func makeCPIAPIHandler(pool *pgxpool.Pool) http.HandlerFunc {
 			return
 		}
 
-		// Load api_key from DB
 		var apiKeyRaw []byte
 		err := pool.QueryRow(r.Context(),
 			`SELECT api_key FROM w_cpi_instances WHERE id = $1`, req.InstanceID,
@@ -106,9 +110,15 @@ func makeCPIAPIHandler(pool *pgxpool.Pool) http.HandlerFunc {
 
 		apiBase := strings.TrimRight(apiKey.OAuth.URL, "/")
 		targetURL := apiBase + "/api/v1" + req.Path
-		if req.Params != "" {
-			targetURL += "?" + req.Params
+		params := req.Params
+		if !strings.Contains(params, "$format=json") {
+			if params != "" {
+				params += "&$format=json"
+			} else {
+				params = "$format=json"
+			}
 		}
+		targetURL += "?" + params
 
 		apiReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, targetURL, nil)
 		if err != nil {
@@ -118,8 +128,7 @@ func makeCPIAPIHandler(pool *pgxpool.Pool) http.HandlerFunc {
 		apiReq.Header.Set("Authorization", "Bearer "+token)
 		apiReq.Header.Set("Accept", "application/json")
 
-		client := &http.Client{Timeout: 30 * time.Second}
-		resp, err := client.Do(apiReq)
+		resp, err := apiHTTPClient.Do(apiReq)
 		if err != nil {
 			jsonError(w, "CPI API error: "+err.Error(), http.StatusBadGateway)
 			return
@@ -150,8 +159,7 @@ func getOAuthToken(ctx context.Context, cacheKey, tokenURL, clientID, clientSecr
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.SetBasicAuth(clientID, clientSecret)
 
-	client := &http.Client{Timeout: 15 * time.Second}
-	resp, err := client.Do(req)
+	resp, err := oauthHTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}

@@ -1,0 +1,13 @@
+# Stage 1: Build Go binary
+FROM golang:1.25-alpine AS builder
+WORKDIR /app
+COPY go.mod ./
+RUN go mod download
+COPY . .
+RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /cpi-dev ./cmd/cpi-dev
+
+# Stage 2: Minimal runtime image
+FROM gcr.io/distroless/static-debian12
+COPY --from=builder /cpi-dev /cpi-dev
+EXPOSE 8084
+ENTRYPOINT ["/cpi-dev"]

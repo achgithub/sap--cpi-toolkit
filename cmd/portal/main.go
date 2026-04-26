@@ -27,6 +27,7 @@ func main() {
 	workerURL        := envOr("WORKER_INTERNAL_URL",          "http://localhost:8081")
 	groovyURL        := envOr("GROOVY_INTERNAL_URL",          "http://localhost:8082")
 	adapterURL       := envOr("ADAPTER_CONTROL_INTERNAL_URL", "http://localhost:8083")
+	cpiDevURL        := envOr("CPI_DEV_INTERNAL_URL",         "http://localhost:8084")
 
 	authMiddleware := auth.New(auth.Config{
 		BypassEnabled: envOr("AUTH_BYPASS_ENABLED", "false") == "true",
@@ -40,6 +41,7 @@ func main() {
 	workerProxy  := mustProxy(workerURL,  "/api/worker")
 	groovyProxy  := mustProxy(groovyURL,  "/api/groovy")
 	adapterProxy := mustProxy(adapterURL, "/api/adapter")
+	cpiDevProxy  := mustProxy(cpiDevURL,  "/api/cpidev")
 
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -62,6 +64,7 @@ func main() {
 	mux.Handle("/api/worker/",   authMiddleware.Handler(workerProxy))
 	mux.Handle("/api/groovy/",   authMiddleware.Handler(groovyProxy))
 	mux.Handle("/api/adapter/",  authMiddleware.Handler(adapterProxy))
+	mux.Handle("/api/cpidev/",   authMiddleware.Handler(cpiDevProxy))
 
 	// React SPA — authenticated (redirects to /auth/login if no session)
 	mux.Handle("/", authMiddleware.Handler(spaHandler(http.FileServer(http.FS(staticFS)))))

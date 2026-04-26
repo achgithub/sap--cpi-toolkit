@@ -10,6 +10,7 @@ echo "==> Building images (tag: $TAG)"
 
 docker build -f Dockerfile.portal        -t "$REGISTRY/cpi-toolkit-portal:$TAG"          .
 docker build -f Dockerfile.worker        -t "$REGISTRY/cpi-toolkit-worker:$TAG"           .
+docker build -f Dockerfile.cpi-dev       -t "$REGISTRY/cpi-toolkit-cpi-dev:$TAG"          .
 docker build -f Dockerfile.adapter-control -t "$REGISTRY/cpi-toolkit-adapter-control:$TAG" .
 docker build -f groovy-runner/Dockerfile -t "$REGISTRY/cpi-toolkit-groovy-runner:$TAG"    groovy-runner/
 docker build -f adapters/mock-http/Dockerfile -t "$REGISTRY/cpi-toolkit-mock-http:$TAG"   adapters/mock-http/

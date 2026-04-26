@@ -65,7 +65,7 @@ const STATUS_COLORS: Record<string, string> = {
 // ── API helpers ────────────────────────────────────────────────────────────────
 
 async function cpiApiFetch(instanceId: string, path: string, params: string) {
-  const res = await fetch('/api/worker/cpi-api', {
+  const res = await fetch('/api/cpidev/cpi-api', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ instance_id: instanceId, path, params }),
@@ -76,7 +76,7 @@ async function cpiApiFetch(instanceId: string, path: string, params: string) {
 }
 
 async function tilesFetch(path = '', opts?: RequestInit) {
-  const res = await fetch('/api/worker/monitoring/tiles' + path, opts)
+  const res = await fetch('/api/cpidev/monitoring/tiles' + path, opts)
   if (res.status === 204) return null
   const data = await res.json()
   if (!res.ok) throw new Error(data.error || res.statusText)

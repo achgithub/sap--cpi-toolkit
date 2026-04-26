@@ -103,8 +103,14 @@ function TestTool() {
     setShowReqAssetPicker(false)
   }
 
+  const urlWarnings: string[] = []
+  if (url !== url.trim())           urlWarnings.push('URL has leading or trailing whitespace — will be trimmed on send')
+  if (/\s/.test(url.trim()))        urlWarnings.push('URL contains internal whitespace')
+  if (/([^:])\/\//.test(url.trim())) urlWarnings.push('URL contains double slashes in the path')
+
   const sendRequest = async () => {
-    if (!url.trim()) { setReqError('URL is required'); return }
+    const cleanUrl = url.trim()
+    if (!cleanUrl) { setReqError('URL is required'); return }
     setSending(true)
     setResponse(null)
     setReqError('')
@@ -117,7 +123,7 @@ function TestTool() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           method,
-          url,
+          url: cleanUrl,
           headers: hdrs,
           body: ['GET', 'HEAD', 'OPTIONS'].includes(method) ? '' : body,
         }),
@@ -170,8 +176,12 @@ function TestTool() {
               content={requestAsJson()}
               onSaved={() => setShowReqAssetSave(false)}
               onClose={() => setShowReqAssetSave(false)}
+              lockedContentType="req"
             />
           )}
+          {urlWarnings.map((w, i) => (
+            <MessageStrip key={i} design="Warning" hideCloseButton style={{ fontSize: '0.8rem' }}>{w}</MessageStrip>
+          ))}
           {reqError && <MessageStrip design="Negative" onClose={() => setReqError('')}>{reqError}</MessageStrip>}
         </div>
       </Card>
@@ -203,6 +213,7 @@ function TestTool() {
                 content={body}
                 onSaved={() => setShowBodyAssetSave(false)}
                 onClose={() => setShowBodyAssetSave(false)}
+                lockedContentType="req"
               />
             )}
             <TextArea value={body} rows={6} style={{ width: '100%', fontFamily: 'monospace' }}
@@ -242,6 +253,7 @@ function TestTool() {
                   content={response.body}
                   onSaved={() => setShowRespAssetSave(false)}
                   onClose={() => setShowRespAssetSave(false)}
+                  lockedContentType="req"
                 />
               )}
               <pre style={{ fontFamily: 'monospace', fontSize: '0.82rem', whiteSpace: 'pre-wrap',
@@ -295,13 +307,16 @@ function HeadersEditor({ headers, onChange }: { headers: HeaderRow[]; onChange: 
 
 // ── Asset picker panel ─────────────────────────────────────────────────────────
 
+const ASSET_EXT_OPTIONS = ['req', 'xml', 'json', 'text', 'edi', 'csv']
+
 function AssetPickerPanel({ onSelect, onClose }: {
   onSelect: (a: Asset) => void
   onClose: () => void
 }) {
-  const [assets,  setAssets]  = useState<Asset[]>([])
-  const [loading, setLoading] = useState(true)
-  const [filter,  setFilter]  = useState('')
+  const [assets,    setAssets]    = useState<Asset[]>([])
+  const [loading,   setLoading]   = useState(true)
+  const [nameFilter, setNameFilter] = useState('')
+  const [extFilter,  setExtFilter]  = useState('req')
 
   useEffect(() => {
     adapterFetch('/assets')
@@ -310,18 +325,25 @@ function AssetPickerPanel({ onSelect, onClose }: {
       .finally(() => setLoading(false))
   }, [])
 
-  const visible = assets.filter(a =>
-    a.name.toLowerCase().includes(filter.toLowerCase()) ||
-    a.content_type.toLowerCase().includes(filter.toLowerCase())
-  )
+  const visible = assets.filter(a => {
+    const matchesName = !nameFilter || a.name.toLowerCase().includes(nameFilter.toLowerCase())
+    const matchesExt  = extFilter === '' || a.content_type === extFilter
+    return matchesName && matchesExt
+  })
 
   return (
     <div style={{ border: '1px solid var(--sapList_BorderColor)', borderRadius: '4px',
       background: 'var(--sapList_Background)', padding: '0.5rem', marginBottom: '0.4rem' }}>
-      <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}
-        style={{ marginBottom: '0.4rem' }}>
-        <Input placeholder="Filter assets…" value={filter} style={{ flex: 1, marginRight: '0.4rem' }}
-          onInput={(e) => setFilter((e.target as any).value)} />
+      <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.4rem', marginBottom: '0.4rem' }}>
+        <Input placeholder="Filter by name…" value={nameFilter} style={{ flex: 1 }}
+          onInput={(e) => setNameFilter((e.target as any).value)} />
+        <Select style={{ width: '90px' }}
+          onChange={(e) => setExtFilter((e.detail.selectedOption as HTMLElement).dataset.value ?? '')}>
+          <Option data-value="" selected={extFilter === ''}>All</Option>
+          {ASSET_EXT_OPTIONS.map(ext => (
+            <Option key={ext} data-value={ext} selected={extFilter === ext}>.{ext}</Option>
+          ))}
+        </Select>
         <Button design="Transparent" icon="decline" onClick={onClose} />
       </FlexBox>
       {loading && <p style={{ margin: 0, fontSize: '0.8rem' }}>Loading…</p>}
@@ -351,13 +373,14 @@ function AssetPickerPanel({ onSelect, onClose }: {
 
 // ── Save asset panel ───────────────────────────────────────────────────────────
 
-function SaveAssetPanel({ content, onSaved, onClose }: {
+function SaveAssetPanel({ content, onSaved, onClose, lockedContentType }: {
   content: string
   onSaved: () => void
   onClose: () => void
+  lockedContentType?: string
 }) {
   const [name,        setName]        = useState('')
-  const [contentType, setContentType] = useState(detectContentType(content))
+  const [contentType, setContentType] = useState(lockedContentType ?? detectContentType(content))
   const [saving,      setSaving]      = useState(false)
   const [error,       setError]       = useState('')
 
@@ -385,12 +408,20 @@ function SaveAssetPanel({ content, onSaved, onClose }: {
       <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
         <Input placeholder="Asset name" value={name} style={{ flex: 1, minWidth: '160px' }}
           onInput={(e) => setName((e.target as any).value)} />
-        <Select style={{ width: '100px' }}
-          onChange={(e) => setContentType((e.detail.selectedOption as HTMLElement).dataset.value ?? 'text')}>
-          {['xml', 'json', 'text', 'edi', 'csv'].map(t => (
-            <Option key={t} data-value={t} selected={contentType === t}>{t}</Option>
-          ))}
-        </Select>
+        {lockedContentType ? (
+          <span style={{
+            padding: '0.25rem 0.6rem', borderRadius: '4px', fontSize: '0.8rem',
+            fontFamily: 'monospace', background: 'var(--sapNeutralBackground)',
+            border: '1px solid var(--sapNeutralBorderColor)', color: 'var(--sapContent_LabelColor)',
+          }}>.{lockedContentType}</span>
+        ) : (
+          <Select style={{ width: '100px' }}
+            onChange={(e) => setContentType((e.detail.selectedOption as HTMLElement).dataset.value ?? 'text')}>
+            {['xml', 'json', 'text', 'edi', 'csv'].map(t => (
+              <Option key={t} data-value={t} selected={contentType === t}>{t}</Option>
+            ))}
+          </Select>
+        )}
         <Button design="Emphasized" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
         <Button design="Transparent" onClick={onClose}>Cancel</Button>
       </FlexBox>

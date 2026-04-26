@@ -29,7 +29,10 @@ const ZZ_PLACEHOLDERS: Record<string, string[]> = {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 function toScreamingSnakeCase(s: string): string {
-  return s.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '')
+  return s.toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^[^A-Z]+/, '')   // strip leading non-alpha so ID always starts with a letter
+    .replace(/_$/g, '')
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -125,8 +128,12 @@ interface FormState {
 
 function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: boolean }) {
   const [step,       setStep]       = useState(1)
-  const [generating, setGenerating] = useState(false)
-  const [error,      setError]      = useState('')
+  const [generating,  setGenerating]  = useState(false)
+  const [uploading,   setUploading]   = useState(false)
+  const [checking,    setChecking]    = useState(false)
+  const [error,       setError]       = useState('')
+  const [uploadMsg,   setUploadMsg]   = useState('')
+  const [preflight,   setPreflight]   = useState<{ package_id: string; package_exists: boolean; iflow_id: string; iflow_exists: boolean } | null>(null)
 
   const [form, setForm] = useState<FormState>({
     name: '', iflowId: '', packageName: '', packageId: '',
@@ -148,26 +155,65 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
     return true
   }
 
+  const buildPayload = () => ({
+    instance_id:      instanceId,
+    name:             form.name,
+    iflow_id:         form.iflowId,
+    package_name:     form.packageName,
+    package_id:       form.packageId,
+    description:      form.description,
+    sender_adapter:   form.senderAdapter,
+    receiver_adapter: form.receiverAdapter,
+    include_groovy:   form.includeGroovy,
+    groovy_name:      form.groovyName || 'script',
+    include_xslt:     form.includeXSLT,
+    xslt_name:        form.xsltName || 'mapping',
+  })
+
+  const checkBeforeUpload = async () => {
+    setChecking(true); setError(''); setPreflight(null); setUploadMsg('')
+    try {
+      const res = await fetch('/api/cpidev/scaffold/upload-preflight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload()),
+      })
+      const data = await res.json().catch(() => ({ error: res.statusText }))
+      if (!res.ok) throw new Error(data.error || res.statusText)
+      setPreflight(data)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  const confirmUpload = async () => {
+    setUploading(true); setError(''); setUploadMsg('')
+    try {
+      const res = await fetch('/api/cpidev/scaffold/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload()),
+      })
+      const data = await res.json().catch(() => ({ error: res.statusText }))
+      if (!res.ok) throw new Error(data.error || res.statusText)
+      setUploadMsg(data.message || 'Uploaded successfully')
+      setPreflight(null)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setUploading(false)
+    }
+  }
+
   const download = async () => {
     setGenerating(true); setError('')
     try {
-      const res = await fetch('/api/worker/scaffold/generate', {
+      const res = await fetch('/api/cpidev/scaffold/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instance_id:      instanceId,
-          name:             form.name,
-          iflow_id:         form.iflowId,
-          package_name:     form.packageName,
-          package_id:       form.packageId,
-          description:      form.description,
-          sender_adapter:   form.senderAdapter,
-          receiver_adapter: form.receiverAdapter,
-          include_groovy:   form.includeGroovy,
-          groovy_name:      form.groovyName || 'script',
-          include_xslt:     form.includeXSLT,
-          xslt_name:        form.xsltName || 'mapping',
-        }),
+        body: JSON.stringify(buildPayload()),
       })
 
       if (!res.ok) {
@@ -207,7 +253,7 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
               style={{ width: '100%' }} disabled={disabled}
               onInput={(e) => handleNameChange((e.target as any).value)} />
           </FormRow>
-          <FormRow label="iFlow ID" required hint="Technical name — auto-generated, editable">
+          <FormRow label="iFlow ID" required hint="Must start with a letter or underscore — auto-generated, editable">
             <Input value={form.iflowId} placeholder="SFTP_TO_HTTP_ORDERS"
               style={{ width: '100%', fontFamily: 'monospace' }} disabled={disabled}
               onInput={(e) => patch({ iflowId: (e.target as any).value })} />
@@ -330,16 +376,65 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
           </div>
 
           {error && (
-            <MessageStrip design="Negative" style={{ marginTop: '1rem' }} onClose={() => setError('')}>
+            <MessageStrip design="Negative" style={{ marginTop: '1rem' }} hideCloseButton={false} onClose={() => setError('')}>
               {error}
             </MessageStrip>
           )}
 
-          <Button design="Emphasized" onClick={download}
-            disabled={generating || disabled || !form.iflowId}
-            style={{ marginTop: '1.5rem' }}>
-            {generating ? 'Generating…' : `⬇ Download ${form.iflowId}.zip`}
-          </Button>
+          {uploadMsg && (
+            <MessageStrip design="Positive" style={{ marginTop: '1rem' }} hideCloseButton={false} onClose={() => setUploadMsg('')}>
+              {uploadMsg}
+            </MessageStrip>
+          )}
+
+          {preflight && (
+            <div style={{
+              marginTop: '1rem', padding: '0.875rem 1rem',
+              border: '1px solid var(--sapList_BorderColor)', borderRadius: '6px',
+              background: 'var(--sapNeutralBackground)', fontFamily: 'var(--sapFontFamily)',
+            }}>
+              <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem', color: 'var(--sapTextColor)' }}>
+                Confirm upload to tenant
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', marginBottom: '0.75rem' }}>
+                <PreflightLine
+                  label="Package"
+                  id={preflight.package_id}
+                  exists={preflight.package_exists}
+                  createMsg="will be created"
+                  existsMsg="already exists"
+                />
+                <PreflightLine
+                  label="iFlow"
+                  id={preflight.iflow_id}
+                  exists={preflight.iflow_exists}
+                  createMsg="will be created"
+                  existsMsg="will be updated (overwrite)"
+                />
+              </div>
+              <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem' }}>
+                <Button design="Emphasized" onClick={confirmUpload} disabled={uploading}>
+                  {uploading ? 'Uploading…' : 'Confirm Upload'}
+                </Button>
+                <Button design="Transparent" onClick={() => setPreflight(null)} disabled={uploading}>
+                  Cancel
+                </Button>
+              </FlexBox>
+            </div>
+          )}
+
+          <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.75rem', marginTop: '1.5rem' }}>
+            <Button design="Emphasized" onClick={download}
+              disabled={generating || uploading || disabled || !form.iflowId}>
+              {generating ? 'Generating…' : `⬇ Download ${form.iflowId}.zip`}
+            </Button>
+            {!preflight && (
+              <Button design="Default" onClick={checkBeforeUpload}
+                disabled={checking || uploading || generating || disabled || !form.iflowId || !form.packageId}>
+                {checking ? 'Checking…' : '↑ Upload to Tenant'}
+              </Button>
+            )}
+          </FlexBox>
         </FormSection>
       )}
 
@@ -440,6 +535,25 @@ function LockedStep({ label, description }: { label: string; description: string
         <div style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--sapTextColor)', fontFamily: 'var(--sapFontFamily)' }}>{label}</div>
         <div style={{ fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'var(--sapFontFamily)' }}>{description}</div>
       </div>
+    </div>
+  )
+}
+
+function PreflightLine({ label, id, exists, createMsg, existsMsg }: {
+  label: string; id: string; exists: boolean; createMsg: string; existsMsg: string
+}) {
+  return (
+    <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.82rem', alignItems: 'center' }}>
+      <span style={{ color: 'var(--sapContent_LabelColor)', minWidth: '52px' }}>{label}</span>
+      <span style={{ fontFamily: 'monospace', color: 'var(--sapTextColor)' }}>{id}</span>
+      <span style={{
+        padding: '0.1rem 0.5rem', borderRadius: '3px', fontSize: '0.75rem',
+        background: exists ? 'var(--sapWarningBackground)' : 'var(--sapSuccessBackground)',
+        color: exists ? 'var(--sapWarningColor)' : 'var(--sapSuccessColor)',
+        border: `1px solid ${exists ? 'var(--sapWarningBorderColor)' : 'var(--sapSuccessBorderColor)'}`,
+      }}>
+        {exists ? existsMsg : createMsg}
+      </span>
     </div>
   )
 }

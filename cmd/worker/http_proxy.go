@@ -40,6 +40,7 @@ func makeProxyHandler(pool *pgxpool.Pool) http.HandlerFunc {
 			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 			return
 		}
+		req.URL = strings.TrimSpace(req.URL)
 		if req.URL == "" {
 			http.Error(w, `{"error":"url is required"}`, http.StatusBadRequest)
 			return

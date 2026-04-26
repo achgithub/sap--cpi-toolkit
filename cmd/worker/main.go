@@ -66,15 +66,6 @@ func main() {
 		// Global settings
 		registerSettingsRoutes(mux, pool)
 
-		// CPI OData API proxy (OAuth handled server-side)
-		mux.HandleFunc("/cpi-api", makeCPIAPIHandler(pool))
-
-		// Monitoring tiles
-		registerMonitoringTileRoutes(mux, pool)
-
-		// iFlow Scaffold generator
-		mux.HandleFunc("/scaffold/generate", makeScaffoldHandler(pool))
-
 		// HTTP client collections (persisted in Postgres)
 		registerCollectionRoutes(mux, pool)
 
