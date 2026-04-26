@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import Editor, { useMonaco } from '@monaco-editor/react'
+import type * as MonacoType from 'monaco-editor'
 import { type SampleInput } from '../data/scriptLibrary'
 import { SaveToAssetsButton, LoadFromAssetButton } from './AssetStore'
 import {
@@ -16,6 +18,8 @@ import {
   Toolbar,
   ToolbarSpacer,
 } from '@ui5/webcomponents-react'
+
+interface LintError { line: number; column: number; message: string }
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,10 +102,55 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
   const [timeoutMs,  setTimeoutMs]  = useState(10000)
   const [running,    setRunning]    = useState(false)
   const [result,     setResult]     = useState<ExecuteResult | null>(null)
+  const [lintErrors, setLintErrors] = useState<LintError[]>([])
+  const [darkTheme,  setDarkTheme]  = useState(false)
+
+  const monaco    = useMonaco()
+  const editorRef = useRef<MonacoType.editor.IStandaloneCodeEditor | null>(null)
+  const lintTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const runLint = useCallback(async (src: string) => {
+    if (!monaco || !editorRef.current || !src.trim()) {
+      setLintErrors([])
+      return
+    }
+    try {
+      const res  = await fetch('/api/groovy/lint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ script: src }),
+      })
+      const data = await res.json()
+      const errors: LintError[] = data.errors ?? []
+      setLintErrors(errors)
+      const model = editorRef.current?.getModel()
+      if (model) {
+        monaco.editor.setModelMarkers(model, 'groovy-lint', errors.map(e => ({
+          startLineNumber: e.line,
+          startColumn:     e.column,
+          endLineNumber:   e.line,
+          endColumn:       9999,
+          message:         e.message,
+          severity:        monaco.MarkerSeverity.Error,
+        })))
+      }
+    } catch { /* groovy-runner unavailable — fail silently */ }
+  }, [monaco])
+
+  const scheduleLint = useCallback((src: string) => {
+    if (lintTimer.current) clearTimeout(lintTimer.current)
+    lintTimer.current = setTimeout(() => runLint(src), 800)
+  }, [runLint])
+
+  // Re-apply markers when Monaco finishes loading
+  useEffect(() => {
+    if (monaco && editorRef.current) runLint(script)
+  }, [monaco]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (inject?.body) {
       setScript(inject.body)
+      setLintErrors([])
       setResult(null)
       if (inject.sample) {
         if (inject.sample.body       !== undefined) setBody(inject.sample.body)
@@ -146,20 +195,90 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
         />
       }>
         <FlexBox direction={FlexBoxDirection.Column} style={{ padding: '1rem', gap: '0.75rem' }}>
-          <TextArea
-            value={script}
-            rows={20}
-            style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.82rem' }}
-            onInput={(e) => setScript((e.target as unknown as HTMLTextAreaElement).value)}
-          />
+
+          <div style={{
+            border: '1px solid var(--sapList_BorderColor)',
+            borderRadius: '4px',
+            overflow: 'hidden',
+          }}>
+            <Editor
+              height="520px"
+              language="java"
+              value={script}
+              theme={darkTheme ? 'vs-dark' : 'vs'}
+              options={{
+                fontSize: 13,
+                fontFamily: "'Menlo', 'Monaco', 'Courier New', monospace",
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                wordWrap: 'off',
+                tabSize: 4,
+                automaticLayout: true,
+                lineNumbers: 'on',
+                folding: true,
+                bracketPairColorization: { enabled: true },
+                renderLineHighlight: 'line',
+              }}
+              onChange={(value) => {
+                const v = value ?? ''
+                setScript(v)
+                scheduleLint(v)
+              }}
+              onMount={(editor) => {
+                editorRef.current = editor
+                runLint(script)
+              }}
+            />
+          </div>
+
+          {lintErrors.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+              {lintErrors.map((e, i) => (
+                <div key={i} style={{
+                  fontFamily: 'monospace', fontSize: '0.78rem',
+                  color: 'var(--sapNegativeColor)',
+                  background: 'var(--sapNegativeBackground)',
+                  padding: '0.25rem 0.6rem', borderRadius: '3px',
+                  border: '1px solid var(--sapNegativeBorderColor)',
+                }}>
+                  Line {e.line}:{e.column} — {e.message}
+                </div>
+              ))}
+            </div>
+          )}
+
           <Toolbar>
             <Button design="Emphasized" disabled={running || !script.trim()} onClick={run}>
               {running ? 'Running…' : 'Run Script'}
             </Button>
-            <Button design="Transparent" onClick={() => { setScript(SAMPLE_SCRIPT); setResult(null) }}>
+            <Button design="Transparent" onClick={() => {
+              setScript(SAMPLE_SCRIPT)
+              setLintErrors([])
+              setResult(null)
+            }}>
               Reset to sample
             </Button>
+            {lintErrors.length > 0 && (
+              <span style={{
+                fontSize: '0.82rem', fontFamily: 'var(--sapFontFamily)',
+                color: 'var(--sapNegativeColor)', fontWeight: 600,
+                padding: '0 0.5rem',
+              }}>
+                ✕ {lintErrors.length} lint error{lintErrors.length > 1 ? 's' : ''}
+              </span>
+            )}
+            {lintErrors.length === 0 && script.trim() && (
+              <span style={{
+                fontSize: '0.82rem', fontFamily: 'var(--sapFontFamily)',
+                color: 'var(--sapPositiveColor)', padding: '0 0.5rem',
+              }}>
+                ✓ No errors
+              </span>
+            )}
             <ToolbarSpacer />
+            <Button design="Transparent" onClick={() => setDarkTheme(v => !v)}>
+              {darkTheme ? '☀ Light' : '☾ Dark'}
+            </Button>
             <Label style={{ color: 'var(--sapNeutralColor)' }}>Timeout</Label>
             <SegmentedButton
               onSelectionChange={(e) => {
@@ -172,6 +291,7 @@ export default function GroovyIDE({ inject }: { inject?: { body: string; sample?
               <SegmentedButtonItem data-ms="30000" selected={timeoutMs === 30000}>30s</SegmentedButtonItem>
             </SegmentedButton>
           </Toolbar>
+
         </FlexBox>
       </Card>
 

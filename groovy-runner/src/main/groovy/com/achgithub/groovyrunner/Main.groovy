@@ -43,6 +43,45 @@ class Main {
             respond(ex, 200, 'ok', 'text/plain')
         }
 
+        server.createContext('/lint') { HttpExchange ex ->
+            if (ex.requestMethod != 'POST') {
+                jsonError(ex, 405, 'method not allowed')
+                return
+            }
+            try {
+                def raw    = ex.requestBody.text
+                def req    = new JsonSlurper().parseText(raw) as Map
+                String src = req.script ?: ''
+
+                def errors = []
+                if (src.trim()) {
+                    try {
+                        def cl    = new GroovyClassLoader(Main.classLoader)
+                        def shell = new GroovyShell(cl)
+                        shell.parse(src)
+                    } catch (org.codehaus.groovy.control.MultipleCompilationErrorsException e) {
+                        e.errorCollector.errors?.each { msg ->
+                            if (msg instanceof org.codehaus.groovy.control.messages.SyntaxErrorMessage) {
+                                def se = msg.cause
+                                errors << [
+                                    line:    se.line,
+                                    column:  se.startColumn,
+                                    message: se.originalMessage ?: se.message,
+                                ]
+                            }
+                        }
+                        if (errors.isEmpty()) errors << [line: 1, column: 1, message: e.message]
+                    } catch (Exception e) {
+                        errors << [line: 1, column: 1, message: e.message ?: 'Parse error']
+                    }
+                }
+
+                jsonRespond(ex, 200, [errors: errors])
+            } catch (Exception e) {
+                jsonError(ex, 500, e.message ?: 'internal error')
+            }
+        }
+
         server.createContext('/execute') { HttpExchange ex ->
             if (ex.requestMethod != 'POST') {
                 jsonError(ex, 405, 'method not allowed')
