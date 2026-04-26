@@ -209,9 +209,10 @@ export default function App() {
           <div
             key={id}
             style={{
-              display:  activeTab === id ? 'block' : 'none',
-              padding:  '1rem',
-              height:   '100%',
+              display:   activeTab === id ? 'block' : 'none',
+              padding:   '1rem',
+              height:    '100%',
+              overflowY: 'auto',
               boxSizing: 'border-box',
             }}
           >
@@ -219,7 +220,7 @@ export default function App() {
           </div>
         ))}
         {activeTab === 'assets' && (
-          <div style={{ padding: '1rem', height: '100%', boxSizing: 'border-box' }}>
+          <div style={{ padding: '1rem', height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}>
             <AssetStore />
           </div>
         )}

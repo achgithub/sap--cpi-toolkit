@@ -139,7 +139,7 @@ function TestTool() {
   }
 
   return (
-    <FlexBox direction={FlexBoxDirection.Column} style={{ height: '100%', gap: '0.75rem', overflow: 'hidden' }}>
+    <FlexBox direction={FlexBoxDirection.Column} style={{ gap: '0.75rem' }}>
 
       {/* Method + URL */}
       <Card>
@@ -216,7 +216,7 @@ function TestTool() {
                 lockedContentType="req"
               />
             )}
-            <TextArea value={body} rows={6} style={{ width: '100%', fontFamily: 'monospace' }}
+            <TextArea value={body} rows={14} style={{ width: '100%', fontFamily: 'monospace' }}
               onInput={(e) => setBody((e.target as any).value)} />
           </div>
         </div>
@@ -224,26 +224,51 @@ function TestTool() {
 
       {/* Response */}
       {response && (
-        <Card header={
-          <CardHeader
-            titleText={`Response — ${response.status} ${response.statusText}`}
-            subtitleText={`${response.durationMs} ms`}
-            style={{ color: response.status < 400 ? 'var(--sapPositiveColor)' : 'var(--sapNegativeColor)' }}
-          />
-        } style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
+        <Card>
           <div style={{ padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+
+            {/* Status line */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{
+                fontSize: '1.4rem', fontWeight: 700, fontFamily: 'monospace',
+                color: response.status < 400 ? 'var(--sapPositiveColor)' : 'var(--sapNegativeColor)',
+              }}>
+                {response.status}
+              </span>
+              <span style={{ fontSize: '0.9rem', color: 'var(--sapTextColor)', fontFamily: 'var(--sapFontFamily)' }}>
+                {response.statusText}
+              </span>
+              <span style={{ fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'var(--sapFontFamily)', marginLeft: 'auto' }}>
+                {response.durationMs} ms
+              </span>
+            </div>
+
+            {/* Response headers */}
             <div>
-              <Label>Headers</Label>
+              <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)',
+                fontFamily: 'var(--sapFontFamily)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Headers
+              </div>
               <div style={{ fontFamily: 'monospace', fontSize: '0.78rem',
-                background: 'var(--sapList_Background)', padding: '0.5rem', borderRadius: '4px' }}>
+                background: 'var(--sapNeutralBackground)', padding: '0.5rem 0.75rem', borderRadius: '4px',
+                display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
                 {Object.entries(response.headers).map(([k, v]) => (
-                  <div key={k}><strong>{k}:</strong> {v}</div>
+                  <div key={k} style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span style={{ color: 'var(--sapContent_LabelColor)', flexShrink: 0 }}>{k}:</span>
+                    <span style={{ color: 'var(--sapTextColor)', wordBreak: 'break-all' }}>{v}</span>
+                  </div>
                 ))}
               </div>
             </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-              <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}>
-                <Label>Body</Label>
+
+            {/* Response body */}
+            <div>
+              <FlexBox alignItems={FlexBoxAlignItems.Center} justifyContent={FlexBoxJustifyContent.SpaceBetween}
+                style={{ marginBottom: '0.35rem' }}>
+                <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)',
+                  fontFamily: 'var(--sapFontFamily)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Body
+                </div>
                 <Button design="Transparent" onClick={() => setShowRespAssetSave(v => !v)}>
                   Save as Asset
                 </Button>
@@ -256,12 +281,14 @@ function TestTool() {
                   lockedContentType="req"
                 />
               )}
-              <pre style={{ fontFamily: 'monospace', fontSize: '0.82rem', whiteSpace: 'pre-wrap',
-                background: 'var(--sapList_Background)', padding: '0.75rem', borderRadius: '4px',
-                margin: 0, overflow: 'auto', flex: 1 }}>
-                {tryPrettyPrint(response.body)}
+              <pre style={{
+                fontFamily: 'monospace', fontSize: '0.82rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                background: 'var(--sapNeutralBackground)', padding: '0.75rem', borderRadius: '4px', margin: 0,
+              }}>
+                {response.body ? tryPrettyPrint(response.body) : <span style={{ color: 'var(--sapContent_LabelColor)' }}>(empty body)</span>}
               </pre>
             </div>
+
           </div>
         </Card>
       )}
