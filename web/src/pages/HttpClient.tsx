@@ -202,10 +202,15 @@ function TestTool() {
             <AssetPickerPanel
               defaultExtFilter="headers"
               onSelect={(a) => {
-                const rows = a.content.split('\n')
+                const newRows = a.content.split('\n')
                   .filter(l => l.includes(':'))
                   .map(l => { const i = l.indexOf(':'); return { key: l.slice(0, i).trim(), value: l.slice(i + 1).trim() } })
-                if (rows.length) setHeaders([...rows, { key: '', value: '' }])
+                if (newRows.length) {
+                  setHeaders(prev => {
+                    const existing = prev.filter(h => h.key.trim() !== '' || h.value.trim() !== '')
+                    return [...existing, ...newRows, { key: '', value: '' }]
+                  })
+                }
                 setShowHdrAssetPicker(false)
               }}
               onClose={() => setShowHdrAssetPicker(false)}
