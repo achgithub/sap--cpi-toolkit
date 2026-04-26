@@ -31,6 +31,7 @@ import Monitoring from './pages/Monitoring'
 import MockService from './pages/MockService'
 import SFTPServer from './pages/SFTPServer'
 import AssetStore from './pages/AssetStore'
+import InterfaceDiagram from './pages/InterfaceDiagram'
 import { type SampleInput } from './data/scriptLibrary'
 import SettingsDialog from './components/SettingsDialog'
 
@@ -51,6 +52,7 @@ function buildSuiteURL(apiUrl: string): string | null {
 }
 
 type ToolTab =
+  | 'interface-diagram'
   | 'xml-formatter'
   | 'json-formatter'
   | 'xsd-generator'
@@ -71,6 +73,12 @@ type ToolTab =
   | 'lookup-tables'
 
 const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
+  {
+    label: 'Design',
+    tabs: [
+      { id: 'interface-diagram', label: 'Interface Diagram' },
+    ],
+  },
   {
     label: 'CPI',
     tabs: [
@@ -231,6 +239,7 @@ export default function App() {
 
       <div style={{ flex: 1, overflow: 'auto', background: 'var(--sapBackgroundColor)', position: 'relative' }}>
         {([
+          ['interface-diagram', <InterfaceDiagram />],
           ['xml-formatter',  <XMLFormatter />],
           ['json-formatter', <JSONFormatter />],
           ['xsd-generator',  <XSDGenerator />],
