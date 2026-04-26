@@ -26,6 +26,18 @@ type scaffoldTmplData struct {
 	GroovyName     string // step_groovy
 	XSLTName       string // step_xslt
 	SourceRef      string // receiver_messageflow_* sourceRef attribute
+	// Adapter properties
+	HTTPSUrlPath          string // sender_messageflow_HTTPS
+	SFTPSenderHost        string // sender_messageflow_SFTP
+	SFTPSenderCredential  string // sender_messageflow_SFTP
+	SFTPSenderDirectory   string // sender_messageflow_SFTP
+	SFTPSenderScheduleXML string // sender_messageflow_SFTP — pre-encoded scheduleKey value
+	HTTPReceiverURL       string // receiver_messageflow_HTTP
+	HTTPReceiverCredential string // receiver_messageflow_HTTP
+	SFTPReceiverHost      string // receiver_messageflow_SFTP
+	SFTPReceiverPrivateKey string // receiver_messageflow_SFTP
+	SFTPReceiverUsername  string // receiver_messageflow_SFTP
+	SFTPReceiverDirectory string // receiver_messageflow_SFTP
 }
 
 type tmplDef struct {
@@ -55,14 +67,25 @@ var defaultScaffoldTemplates = map[string]tmplDef{
         </bpmn2:extensionElements>`,
 	},
 
-	"sender_participant": {
-		Label:     "Sender Participant",
+	"sender_participant_HTTPS": {
+		Label:     "HTTPS Sender Participant",
 		Variables: nil,
 		Body: `
         <bpmn2:participant id="Participant_Sender" ifl:type="EndpointSender" name="Sender1">
             <bpmn2:extensionElements>
                 <ifl:property><key>enableBasicAuthentication</key><value>false</value></ifl:property>
                 <ifl:property><key>ifl:type</key><value>EndpointSender</value></ifl:property>
+            </bpmn2:extensionElements>
+        </bpmn2:participant>`,
+	},
+
+	"sender_participant_SFTP": {
+		Label:     "SFTP Sender Participant",
+		Variables: nil,
+		Body: `
+        <bpmn2:participant id="Participant_Sender" ifl:type="IflSender" name="Sender1">
+            <bpmn2:extensionElements>
+                <ifl:property><key>ifl:type</key><value>IflSender</value></ifl:property>
             </bpmn2:extensionElements>
         </bpmn2:participant>`,
 	},
@@ -86,7 +109,7 @@ var defaultScaffoldTemplates = map[string]tmplDef{
 
 	"sender_messageflow_HTTPS": {
 		Label:     "HTTPS Sender Adapter",
-		Variables: nil,
+		Variables: []string{"HTTPSUrlPath"},
 		Body: `
         <bpmn2:messageFlow id="MessageFlow_Sender" name="HTTPS"
             sourceRef="Participant_Sender" targetRef="StartEvent_1">
@@ -97,7 +120,7 @@ var defaultScaffoldTemplates = map[string]tmplDef{
                 <ifl:property><key>Name</key><value>HTTPS</value></ifl:property>
                 <ifl:property><key>system</key><value>Sender1</value></ifl:property>
                 <ifl:property><key>Description</key><value/></ifl:property>
-                <ifl:property><key>urlPath</key><value>ZZURLPATH</value></ifl:property>
+                <ifl:property><key>urlPath</key><value>{{.HTTPSUrlPath}}</value></ifl:property>
                 <ifl:property><key>senderAuthType</key><value>RoleBased</value></ifl:property>
                 <ifl:property><key>userRole</key><value>ESBMessaging.send</value></ifl:property>
                 <ifl:property><key>xsrfProtection</key><value>1</value></ifl:property>
@@ -115,7 +138,7 @@ var defaultScaffoldTemplates = map[string]tmplDef{
 
 	"sender_messageflow_SFTP": {
 		Label:     "SFTP Sender Adapter",
-		Variables: nil,
+		Variables: []string{"SFTPSenderHost", "SFTPSenderCredential", "SFTPSenderDirectory", "SFTPSenderScheduleXML"},
 		Body: `
         <bpmn2:messageFlow id="MessageFlow_Sender" name="SFTP"
             sourceRef="Participant_Sender" targetRef="StartEvent_1">
@@ -127,15 +150,15 @@ var defaultScaffoldTemplates = map[string]tmplDef{
                 <ifl:property><key>system</key><value>Sender1</value></ifl:property>
                 <ifl:property><key>direction</key><value>Sender</value></ifl:property>
                 <ifl:property><key>Description</key><value/></ifl:property>
-                <ifl:property><key>host</key><value>ZZHOST</value></ifl:property>
+                <ifl:property><key>host</key><value>{{.SFTPSenderHost}}</value></ifl:property>
                 <ifl:property><key>authentication</key><value>user_password</value></ifl:property>
-                <ifl:property><key>credential_name</key><value>ZZCREDENTIALNAME</value></ifl:property>
+                <ifl:property><key>credential_name</key><value>{{.SFTPSenderCredential}}</value></ifl:property>
                 <ifl:property><key>username</key><value/></ifl:property>
                 <ifl:property><key>privateKeyAlias</key><value/></ifl:property>
                 <ifl:property><key>connectTimeout</key><value>10000</value></ifl:property>
                 <ifl:property><key>maximumReconnectAttempts</key><value>3</value></ifl:property>
                 <ifl:property><key>reconnectDelay</key><value>1000</value></ifl:property>
-                <ifl:property><key>path</key><value>ZZDIRECTORY</value></ifl:property>
+                <ifl:property><key>path</key><value>{{.SFTPSenderDirectory}}</value></ifl:property>
                 <ifl:property><key>fileName</key><value>*</value></ifl:property>
                 <ifl:property><key>regex_filter</key><value>0</value></ifl:property>
                 <ifl:property><key>recursive</key><value>0</value></ifl:property>
@@ -144,7 +167,7 @@ var defaultScaffoldTemplates = map[string]tmplDef{
                 <ifl:property><key>noop</key><value>delete</value></ifl:property>
                 <ifl:property><key>file.move</key><value>.archive</value></ifl:property>
                 <ifl:property><key>doneFileName</key><value>${file:name}.done</value></ifl:property>
-                <ifl:property><key>scheduleKey</key><value>&lt;row&gt;&lt;cell&gt;dateType&lt;/cell&gt;&lt;cell&gt;DAILY&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;secondValue&lt;/cell&gt;&lt;cell&gt;0&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;toInterval&lt;/cell&gt;&lt;cell&gt;1&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;fromInterval&lt;/cell&gt;&lt;cell&gt;0&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;OnEveryHour&lt;/cell&gt;&lt;cell&gt;1&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;timeType&lt;/cell&gt;&lt;cell&gt;TIME_HOUR_INTERVAL&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;timeZone&lt;/cell&gt;&lt;cell&gt;( UTC -10:00 ) Hawaii Standard Time(HST)&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;throwExceptionOnExpiry&lt;/cell&gt;&lt;cell&gt;true&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;triggerType&lt;/cell&gt;&lt;cell&gt;cron&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;noOfSchedules&lt;/cell&gt;&lt;cell&gt;1&lt;/cell&gt;&lt;/row&gt;&lt;row&gt;&lt;cell&gt;schedule1&lt;/cell&gt;&lt;cell&gt;0+0+0+?+*+*+*&amp;amp;trigger.timeZone=HST&lt;/cell&gt;&lt;/row&gt;</value></ifl:property>
+                <ifl:property><key>scheduleKey</key><value>{{.SFTPSenderScheduleXML}}</value></ifl:property>
                 <ifl:property><key>maxMessagesPerPoll</key><value>20</value></ifl:property>
                 <ifl:property><key>maximumFileSize</key><value>40</value></ifl:property>
                 <ifl:property><key>disconnect</key><value>1</value></ifl:property>
@@ -169,7 +192,7 @@ var defaultScaffoldTemplates = map[string]tmplDef{
 
 	"receiver_messageflow_HTTP": {
 		Label:     "HTTP Receiver Adapter",
-		Variables: []string{"SourceRef"},
+		Variables: []string{"SourceRef", "HTTPReceiverURL", "HTTPReceiverCredential"},
 		Body: `
         <bpmn2:messageFlow id="MessageFlow_Receiver" name="HTTP"
             sourceRef="{{.SourceRef}}" targetRef="Participant_Receiver">
@@ -180,10 +203,10 @@ var defaultScaffoldTemplates = map[string]tmplDef{
                 <ifl:property><key>Name</key><value>HTTP</value></ifl:property>
                 <ifl:property><key>system</key><value>Receiver1</value></ifl:property>
                 <ifl:property><key>Description</key><value/></ifl:property>
-                <ifl:property><key>address</key><value>ZZURL</value></ifl:property>
+                <ifl:property><key>address</key><value>{{.HTTPReceiverURL}}</value></ifl:property>
                 <ifl:property><key>httpMethod</key><value>POST</value></ifl:property>
                 <ifl:property><key>authType</key><value>BasicAuthentication</value></ifl:property>
-                <ifl:property><key>credentialName</key><value>ZZCREDENTIALNAME</value></ifl:property>
+                <ifl:property><key>credentialName</key><value>{{.HTTPReceiverCredential}}</value></ifl:property>
                 <ifl:property><key>httpRequestTimeout</key><value>60000</value></ifl:property>
                 <ifl:property><key>TransportProtocol</key><value>HTTP</value></ifl:property>
                 <ifl:property><key>MessageProtocol</key><value>None</value></ifl:property>
@@ -198,7 +221,7 @@ var defaultScaffoldTemplates = map[string]tmplDef{
 
 	"receiver_messageflow_SFTP": {
 		Label:     "SFTP Receiver Adapter",
-		Variables: []string{"SourceRef"},
+		Variables: []string{"SourceRef", "SFTPReceiverHost", "SFTPReceiverPrivateKey", "SFTPReceiverUsername", "SFTPReceiverDirectory"},
 		Body: `
         <bpmn2:messageFlow id="MessageFlow_Receiver" name="SFTP"
             sourceRef="{{.SourceRef}}" targetRef="Participant_Receiver">
@@ -210,15 +233,15 @@ var defaultScaffoldTemplates = map[string]tmplDef{
                 <ifl:property><key>system</key><value>Receiver1</value></ifl:property>
                 <ifl:property><key>direction</key><value>Receiver</value></ifl:property>
                 <ifl:property><key>Description</key><value/></ifl:property>
-                <ifl:property><key>host</key><value>ZZHOST</value></ifl:property>
+                <ifl:property><key>host</key><value>{{.SFTPReceiverHost}}</value></ifl:property>
                 <ifl:property><key>authentication</key><value>public_key</value></ifl:property>
-                <ifl:property><key>privateKeyAlias</key><value>ZZPRIVATEKEYALIAS</value></ifl:property>
-                <ifl:property><key>username</key><value>ZZUSERNAME</value></ifl:property>
+                <ifl:property><key>privateKeyAlias</key><value>{{.SFTPReceiverPrivateKey}}</value></ifl:property>
+                <ifl:property><key>username</key><value>{{.SFTPReceiverUsername}}</value></ifl:property>
                 <ifl:property><key>credential_name</key><value/></ifl:property>
                 <ifl:property><key>connectTimeout</key><value>10000</value></ifl:property>
                 <ifl:property><key>maximumReconnectAttempts</key><value>3</value></ifl:property>
                 <ifl:property><key>reconnectDelay</key><value>1000</value></ifl:property>
-                <ifl:property><key>path</key><value>ZZDIRECTORY</value></ifl:property>
+                <ifl:property><key>path</key><value>{{.SFTPReceiverDirectory}}</value></ifl:property>
                 <ifl:property><key>fileName</key><value>${header.CamelFileName}</value></ifl:property>
                 <ifl:property><key>fileExist</key><value>Override</value></ifl:property>
                 <ifl:property><key>autoCreate</key><value>1</value></ifl:property>

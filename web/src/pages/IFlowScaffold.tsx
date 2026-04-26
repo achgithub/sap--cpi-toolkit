@@ -19,12 +19,11 @@ import { useCPIInstance } from '../context/CPIInstanceContext'
 const RESTRICTED_TYPES  = ['QAS', 'PPD', 'PRD']
 const SENDER_ADAPTERS   = ['HTTPS', 'SFTP']
 const RECEIVER_ADAPTERS = ['HTTP', 'SFTP']
-
-const ZZ_PLACEHOLDERS: Record<string, string[]> = {
-  HTTPS: ['ZZURLPATH — HTTP endpoint path exposed on CPI (e.g. /http/my-endpoint)'],
-  SFTP:  ['ZZHOST — SFTP server hostname', 'ZZCREDENTIALNAME — credential alias in Security Material', 'ZZDIRECTORY — SFTP directory path'],
-  HTTP:  ['ZZURL — target HTTP endpoint URL', 'ZZCREDENTIALNAME — credential alias in Security Material'],
-}
+const SCHEDULE_TYPES    = [
+  { value: 'every_minutes', label: 'Every N minutes' },
+  { value: 'every_hours',   label: 'Every N hours'   },
+  { value: 'daily',         label: 'Daily at time'   },
+]
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -124,6 +123,19 @@ interface FormState {
   groovyName:      string
   includeXSLT:     boolean
   xsltName:        string
+  // Adapter properties
+  httpsUrlPath:             string
+  sftpSenderHost:           string
+  sftpSenderCredential:     string
+  sftpSenderDirectory:      string
+  sftpSenderScheduleType:   string
+  sftpSenderScheduleValue:  string
+  httpReceiverUrl:          string
+  httpReceiverCredential:   string
+  sftpReceiverHost:         string
+  sftpReceiverPrivateKey:   string
+  sftpReceiverUsername:     string
+  sftpReceiverDirectory:    string
 }
 
 function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: boolean }) {
@@ -140,6 +152,12 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
     description: '', senderAdapter: 'HTTPS', receiverAdapter: 'HTTP',
     includeGroovy: false, groovyName: 'script',
     includeXSLT: false, xsltName: 'mapping',
+    httpsUrlPath: 'ZZURLPATH',
+    sftpSenderHost: 'ZZHOST', sftpSenderCredential: 'ZZCREDENTIALNAME', sftpSenderDirectory: 'ZZDIRECTORY',
+    sftpSenderScheduleType: 'every_hours', sftpSenderScheduleValue: '1',
+    httpReceiverUrl: 'ZZURL', httpReceiverCredential: 'ZZCREDENTIALNAME',
+    sftpReceiverHost: 'ZZHOST', sftpReceiverPrivateKey: 'ZZPRIVATEKEYALIAS',
+    sftpReceiverUsername: 'ZZUSERNAME', sftpReceiverDirectory: 'ZZDIRECTORY',
   })
 
   const patch = (p: Partial<FormState>) => setForm(prev => ({ ...prev, ...p }))
@@ -168,6 +186,18 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
     groovy_name:      form.groovyName || 'script',
     include_xslt:     form.includeXSLT,
     xslt_name:        form.xsltName || 'mapping',
+    https_url_path:            form.httpsUrlPath,
+    sftp_sender_host:          form.sftpSenderHost,
+    sftp_sender_credential:    form.sftpSenderCredential,
+    sftp_sender_directory:     form.sftpSenderDirectory,
+    sftp_sender_schedule_type: form.sftpSenderScheduleType,
+    sftp_sender_schedule_value: form.sftpSenderScheduleValue,
+    http_receiver_url:         form.httpReceiverUrl,
+    http_receiver_credential:  form.httpReceiverCredential,
+    sftp_receiver_host:        form.sftpReceiverHost,
+    sftp_receiver_private_key: form.sftpReceiverPrivateKey,
+    sftp_receiver_username:    form.sftpReceiverUsername,
+    sftp_receiver_directory:   form.sftpReceiverDirectory,
   })
 
   const checkBeforeUpload = async () => {
@@ -235,10 +265,32 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
     }
   }
 
-  const placeholders = [
-    ...(ZZ_PLACEHOLDERS[form.senderAdapter]   ?? []),
-    ...(ZZ_PLACEHOLDERS[form.receiverAdapter] ?? []),
-  ]
+  const scheduleLabel = () => {
+    const t = form.sftpSenderScheduleType
+    const v = form.sftpSenderScheduleValue
+    if (t === 'every_minutes') return `Every ${v || '30'} minutes (UTC)`
+    if (t === 'daily') return `Daily at ${v || '08:00'} UTC`
+    return `Every ${v || '1'} hour(s) (UTC)`
+  }
+
+  const adapterProps: [string, string][] = []
+  if (form.senderAdapter === 'HTTPS') {
+    adapterProps.push(['HTTPS URL Path', form.httpsUrlPath])
+  } else if (form.senderAdapter === 'SFTP') {
+    adapterProps.push(['SFTP Sender Host', form.sftpSenderHost])
+    adapterProps.push(['SFTP Sender Credential', form.sftpSenderCredential])
+    adapterProps.push(['SFTP Sender Directory', form.sftpSenderDirectory])
+    adapterProps.push(['SFTP Schedule', scheduleLabel()])
+  }
+  if (form.receiverAdapter === 'HTTP') {
+    adapterProps.push(['HTTP Receiver URL', form.httpReceiverUrl])
+    adapterProps.push(['HTTP Receiver Credential', form.httpReceiverCredential])
+  } else if (form.receiverAdapter === 'SFTP') {
+    adapterProps.push(['SFTP Receiver Host', form.sftpReceiverHost])
+    adapterProps.push(['SFTP Receiver Private Key', form.sftpReceiverPrivateKey])
+    adapterProps.push(['SFTP Receiver Username', form.sftpReceiverUsername])
+    adapterProps.push(['SFTP Receiver Directory', form.sftpReceiverDirectory])
+  }
 
   return (
     <div style={{ maxWidth: '720px' }}>
@@ -302,6 +354,99 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
               SFTP: After import, verify <strong>Proxy Type</strong> (Internet vs On-Premise) in the adapter before deploying.
             </MessageStrip>
           )}
+
+          <div style={{ borderTop: '1px solid var(--sapList_BorderColor)', marginTop: '0.5rem', paddingTop: '0.75rem',
+            display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)',
+              fontFamily: 'var(--sapFontFamily)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Sender Properties
+            </div>
+
+            {form.senderAdapter === 'HTTPS' && (
+              <FormRow label="URL Path" hint="e.g. /http/my-endpoint">
+                <Input value={form.httpsUrlPath} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ httpsUrlPath: (e.target as any).value })} />
+              </FormRow>
+            )}
+
+            {form.senderAdapter === 'SFTP' && (<>
+              <FormRow label="Host">
+                <Input value={form.sftpSenderHost} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ sftpSenderHost: (e.target as any).value })} />
+              </FormRow>
+              <FormRow label="Credential Name" hint="Security Material alias">
+                <Input value={form.sftpSenderCredential} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ sftpSenderCredential: (e.target as any).value })} />
+              </FormRow>
+              <FormRow label="Directory">
+                <Input value={form.sftpSenderDirectory} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ sftpSenderDirectory: (e.target as any).value })} />
+              </FormRow>
+              <FormRow label="Schedule" hint="Runs in UTC">
+                <FlexBox alignItems={FlexBoxAlignItems.Center} style={{ gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <Select style={{ minWidth: '160px' }}
+                    onChange={(e) => {
+                      const t = (e.detail.selectedOption as HTMLElement).dataset.value ?? 'every_hours'
+                      patch({ sftpSenderScheduleType: t, sftpSenderScheduleValue: t === 'daily' ? '08:00' : t === 'every_minutes' ? '30' : '1' })
+                    }}>
+                    {SCHEDULE_TYPES.map(s => (
+                      <Option key={s.value} data-value={s.value} selected={form.sftpSenderScheduleType === s.value}>{s.label}</Option>
+                    ))}
+                  </Select>
+                  {form.sftpSenderScheduleType === 'daily' ? (
+                    <Input value={form.sftpSenderScheduleValue} placeholder="08:00"
+                      style={{ width: '90px', fontFamily: 'monospace' }}
+                      onInput={(e) => patch({ sftpSenderScheduleValue: (e.target as any).value })} />
+                  ) : (
+                    <Input type="Number" value={form.sftpSenderScheduleValue}
+                      style={{ width: '70px', fontFamily: 'monospace' }}
+                      onInput={(e) => patch({ sftpSenderScheduleValue: (e.target as any).value })} />
+                  )}
+                  <span style={{ fontSize: '0.78rem', color: 'var(--sapContent_LabelColor)', fontFamily: 'var(--sapFontFamily)' }}>
+                    {form.sftpSenderScheduleType === 'every_minutes' ? 'minutes' : form.sftpSenderScheduleType === 'every_hours' ? 'hours' : 'UTC (HH:MM)'}
+                  </span>
+                </FlexBox>
+              </FormRow>
+            </>)}
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--sapList_BorderColor)', marginTop: '0.25rem', paddingTop: '0.75rem',
+            display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ fontWeight: 600, fontSize: '0.8rem', color: 'var(--sapContent_LabelColor)',
+              fontFamily: 'var(--sapFontFamily)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Receiver Properties
+            </div>
+
+            {form.receiverAdapter === 'HTTP' && (<>
+              <FormRow label="URL" hint="Full target endpoint URL">
+                <Input value={form.httpReceiverUrl} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ httpReceiverUrl: (e.target as any).value })} />
+              </FormRow>
+              <FormRow label="Credential Name" hint="Security Material alias">
+                <Input value={form.httpReceiverCredential} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ httpReceiverCredential: (e.target as any).value })} />
+              </FormRow>
+            </>)}
+
+            {form.receiverAdapter === 'SFTP' && (<>
+              <FormRow label="Host">
+                <Input value={form.sftpReceiverHost} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ sftpReceiverHost: (e.target as any).value })} />
+              </FormRow>
+              <FormRow label="Private Key Alias" hint="Security Material alias">
+                <Input value={form.sftpReceiverPrivateKey} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ sftpReceiverPrivateKey: (e.target as any).value })} />
+              </FormRow>
+              <FormRow label="Username">
+                <Input value={form.sftpReceiverUsername} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ sftpReceiverUsername: (e.target as any).value })} />
+              </FormRow>
+              <FormRow label="Directory">
+                <Input value={form.sftpReceiverDirectory} style={{ width: '100%', fontFamily: 'monospace' }}
+                  onInput={(e) => patch({ sftpReceiverDirectory: (e.target as any).value })} />
+              </FormRow>
+            </>)}
+          </div>
         </FormSection>
       )}
 
@@ -362,16 +507,30 @@ function ScaffoldForm({ instanceId, disabled }: { instanceId: string; disabled: 
           <div style={{ marginTop: '1.25rem' }}>
             <div style={{ fontWeight: 600, fontSize: '0.85rem', marginBottom: '0.5rem',
               fontFamily: 'var(--sapFontFamily)', color: 'var(--sapTextColor)' }}>
-              Post-import — fill these ZZ placeholders in CPI
+              Adapter Configuration
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
-              {placeholders.map((p, i) => (
-                <div key={i} style={{ fontSize: '0.82rem', fontFamily: 'var(--sapFontFamily)',
-                  display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
-                  <span style={{ color: 'var(--sapWarningColor)', fontWeight: 700, flexShrink: 0, fontFamily: 'monospace' }}>ZZ</span>
-                  <span>{p}</span>
-                </div>
-              ))}
+            <div>
+              {adapterProps.map(([label, value]) => {
+                const isZZ = value.startsWith('ZZ')
+                return (
+                  <div key={label} style={{ display: 'grid', gridTemplateColumns: '200px 1fr',
+                    padding: '0.35rem 0', borderBottom: '1px solid var(--sapList_BorderColor)',
+                    fontSize: '0.82rem', fontFamily: 'var(--sapFontFamily)', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--sapContent_LabelColor)', fontWeight: 600 }}>{label}</span>
+                    <span style={{
+                      fontFamily: 'monospace',
+                      color: isZZ ? 'var(--sapWarningColor)' : 'var(--sapTextColor)',
+                      fontWeight: isZZ ? 600 : 400,
+                    }}>
+                      {value}
+                      {isZZ && <span style={{ fontFamily: 'var(--sapFontFamily)', fontWeight: 400,
+                        fontSize: '0.75rem', color: 'var(--sapContent_LabelColor)', marginLeft: '0.5rem' }}>
+                        — fill in CPI after import
+                      </span>}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </div>
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -28,6 +29,19 @@ type ScaffoldRequest struct {
 	GroovyName      string `json:"groovy_name"`
 	IncludeXSLT     bool   `json:"include_xslt"`
 	XSLTName        string `json:"xslt_name"`
+	// Adapter properties — empty string falls back to ZZ placeholder
+	HTTPSUrlPath             string `json:"https_url_path"`
+	SFTPSenderHost           string `json:"sftp_sender_host"`
+	SFTPSenderCredential     string `json:"sftp_sender_credential"`
+	SFTPSenderDirectory      string `json:"sftp_sender_directory"`
+	SFTPSenderScheduleType   string `json:"sftp_sender_schedule_type"`  // every_minutes | every_hours | daily
+	SFTPSenderScheduleValue  string `json:"sftp_sender_schedule_value"` // "30" | "1" | "08:00"
+	HTTPReceiverURL          string `json:"http_receiver_url"`
+	HTTPReceiverCredential   string `json:"http_receiver_credential"`
+	SFTPReceiverHost         string `json:"sftp_receiver_host"`
+	SFTPReceiverPrivateKey   string `json:"sftp_receiver_private_key"`
+	SFTPReceiverUsername     string `json:"sftp_receiver_username"`
+	SFTPReceiverDirectory    string `json:"sftp_receiver_directory"`
 }
 
 var scaffoldAllowedTypes = map[string]bool{"TRL": true, "SBX": true, "DEV": true}
@@ -191,6 +205,22 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string, tmplMap 
 		allowedHeaders = "CamelFileName"
 	}
 
+	base := scaffoldTmplData{
+		AllowedHeaders:         allowedHeaders,
+		SourceRef:              "EndEvent_1",
+		HTTPSUrlPath:           zzDefault(req.HTTPSUrlPath, "ZZURLPATH"),
+		SFTPSenderHost:         zzDefault(req.SFTPSenderHost, "ZZHOST"),
+		SFTPSenderCredential:   zzDefault(req.SFTPSenderCredential, "ZZCREDENTIALNAME"),
+		SFTPSenderDirectory:    zzDefault(req.SFTPSenderDirectory, "ZZDIRECTORY"),
+		SFTPSenderScheduleXML:  buildSFTPScheduleXML(req.SFTPSenderScheduleType, req.SFTPSenderScheduleValue),
+		HTTPReceiverURL:        zzDefault(req.HTTPReceiverURL, "ZZURL"),
+		HTTPReceiverCredential: zzDefault(req.HTTPReceiverCredential, "ZZCREDENTIALNAME"),
+		SFTPReceiverHost:       zzDefault(req.SFTPReceiverHost, "ZZHOST"),
+		SFTPReceiverPrivateKey: zzDefault(req.SFTPReceiverPrivateKey, "ZZPRIVATEKEYALIAS"),
+		SFTPReceiverUsername:   zzDefault(req.SFTPReceiverUsername, "ZZUSERNAME"),
+		SFTPReceiverDirectory:  zzDefault(req.SFTPReceiverDirectory, "ZZDIRECTORY"),
+	}
+
 	var b strings.Builder
 
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
@@ -206,18 +236,18 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string, tmplMap 
 
 	// ── Collaboration
 	b.WriteString("\n    <bpmn2:collaboration id=\"Collaboration_1\" name=\"Default Collaboration\">\n")
-	b.WriteString(renderScaffoldFragment(tmplMap, "collaboration_ext", scaffoldTmplData{AllowedHeaders: allowedHeaders}))
+	b.WriteString(renderScaffoldFragment(tmplMap, "collaboration_ext", base))
 	b.WriteString("\n")
-	b.WriteString(renderScaffoldFragment(tmplMap, "sender_participant", scaffoldTmplData{}))
+	b.WriteString(renderScaffoldFragment(tmplMap, "sender_participant_"+req.SenderAdapter, base))
 	b.WriteString(`
         <bpmn2:participant id="Participant_Process_1" ifl:type="IntegrationProcess"
             name="Integration Process" processRef="Process_1">
             <bpmn2:extensionElements/>
         </bpmn2:participant>
 `)
-	b.WriteString(renderScaffoldFragment(tmplMap, "receiver_participant_"+req.ReceiverAdapter, scaffoldTmplData{}))
-	b.WriteString(renderScaffoldFragment(tmplMap, "sender_messageflow_"+req.SenderAdapter, scaffoldTmplData{}))
-	b.WriteString(renderScaffoldFragment(tmplMap, "receiver_messageflow_"+req.ReceiverAdapter, scaffoldTmplData{SourceRef: "EndEvent_1"}))
+	b.WriteString(renderScaffoldFragment(tmplMap, "receiver_participant_"+req.ReceiverAdapter, base))
+	b.WriteString(renderScaffoldFragment(tmplMap, "sender_messageflow_"+req.SenderAdapter, base))
+	b.WriteString(renderScaffoldFragment(tmplMap, "receiver_messageflow_"+req.ReceiverAdapter, base))
 	b.WriteString("\n    </bpmn2:collaboration>\n")
 
 	// ── Main process
@@ -243,29 +273,29 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string, tmplMap 
 
 	// Content modifier (always first step)
 	cmIdx := indexOf(allIDs, "CallActivity_SetHeaders")
-	b.WriteString(renderScaffoldFragment(tmplMap, "step_content_modifier", scaffoldTmplData{
-		SFIn:  seqFlows[cmIdx-1].id,
-		SFOut: seqFlows[cmIdx].id,
-	}))
+	cmData := base
+	cmData.SFIn = seqFlows[cmIdx-1].id
+	cmData.SFOut = seqFlows[cmIdx].id
+	b.WriteString(renderScaffoldFragment(tmplMap, "step_content_modifier", cmData))
 
 	// Groovy
 	if req.IncludeGroovy {
 		idx := indexOf(allIDs, "CallActivity_Groovy")
-		b.WriteString(renderScaffoldFragment(tmplMap, "step_groovy", scaffoldTmplData{
-			GroovyName: groovyName,
-			SFIn:       seqFlows[idx-1].id,
-			SFOut:      seqFlows[idx].id,
-		}))
+		gData := base
+		gData.GroovyName = groovyName
+		gData.SFIn = seqFlows[idx-1].id
+		gData.SFOut = seqFlows[idx].id
+		b.WriteString(renderScaffoldFragment(tmplMap, "step_groovy", gData))
 	}
 
 	// XSLT
 	if req.IncludeXSLT {
 		idx := indexOf(allIDs, "CallActivity_XSLT")
-		b.WriteString(renderScaffoldFragment(tmplMap, "step_xslt", scaffoldTmplData{
-			XSLTName: xsltName,
-			SFIn:     seqFlows[idx-1].id,
-			SFOut:    seqFlows[idx].id,
-		}))
+		xData := base
+		xData.XSLTName = xsltName
+		xData.SFIn = seqFlows[idx-1].id
+		xData.SFOut = seqFlows[idx].id
+		b.WriteString(renderScaffoldFragment(tmplMap, "step_xslt", xData))
 	}
 
 	// End event
@@ -281,7 +311,7 @@ func generateIFlowXML(req ScaffoldRequest, groovyName, xsltName string, tmplMap 
 `, lastSF)
 
 	// Exception subprocess
-	b.WriteString(renderScaffoldFragment(tmplMap, "step_exception_subprocess", scaffoldTmplData{}))
+	b.WriteString(renderScaffoldFragment(tmplMap, "step_exception_subprocess", base))
 
 	// Sequence flows
 	for _, sf := range seqFlows {
@@ -411,6 +441,78 @@ func xsltStub() string {
     </xsl:template>
 </xsl:stylesheet>
 `
+}
+
+// ── Adapter helpers ────────────────────────────────────────────────────────────
+
+func zzDefault(val, fallback string) string {
+	if strings.TrimSpace(val) == "" {
+		return fallback
+	}
+	return val
+}
+
+// buildSFTPScheduleXML returns a double-encoded scheduleKey value ready for
+// embedding in the iFlow XML. CPI decodes it twice: outer XML → inner XML rows.
+// encoding order: & → &amp;amp; then < → &lt; then > → &gt;
+func buildSFTPScheduleXML(scheduleType, scheduleValue string) string {
+	const tz = "( UTC +00:00 ) UTC(UTC)"
+	const tzID = "UTC"
+
+	var rows string
+	switch scheduleType {
+	case "every_minutes":
+		n, _ := strconv.Atoi(scheduleValue)
+		if n <= 0 {
+			n = 30
+		}
+		rows = fmt.Sprintf(
+			"<row><cell>dateType</cell><cell>DAILY</cell></row>"+
+				"<row><cell>timeType</cell><cell>TIME_INTERVAL</cell></row>"+
+				"<row><cell>triggerType</cell><cell>cron</cell></row>"+
+				"<row><cell>throwExceptionOnExpiry</cell><cell>true</cell></row>"+
+				"<row><cell>timeZone</cell><cell>%s</cell></row>"+
+				"<row><cell>noOfSchedules</cell><cell>1</cell></row>"+
+				"<row><cell>schedule1</cell><cell>0+0/%d+*+?+*+*+*&trigger.timeZone=%s</cell></row>",
+			tz, n, tzID)
+	case "daily":
+		parts := strings.SplitN(scheduleValue, ":", 2)
+		hh, mm := "08", "00"
+		if len(parts) == 2 {
+			hh, mm = parts[0], parts[1]
+		}
+		rows = fmt.Sprintf(
+			"<row><cell>dateType</cell><cell>DAILY</cell></row>"+
+				"<row><cell>timeType</cell><cell>TIME_DAY</cell></row>"+
+				"<row><cell>startTime</cell><cell>%s:%s:00</cell></row>"+
+				"<row><cell>triggerType</cell><cell>cron</cell></row>"+
+				"<row><cell>throwExceptionOnExpiry</cell><cell>true</cell></row>"+
+				"<row><cell>timeZone</cell><cell>%s</cell></row>"+
+				"<row><cell>noOfSchedules</cell><cell>1</cell></row>"+
+				"<row><cell>schedule1</cell><cell>0+%s+%s+?+*+*+*&trigger.timeZone=%s</cell></row>",
+			hh, mm, tz, mm, hh, tzID)
+	default: // every_hours
+		n, _ := strconv.Atoi(scheduleValue)
+		if n <= 0 {
+			n = 1
+		}
+		rows = fmt.Sprintf(
+			"<row><cell>dateType</cell><cell>DAILY</cell></row>"+
+				"<row><cell>timeType</cell><cell>TIME_HOUR_INTERVAL</cell></row>"+
+				"<row><cell>OnEveryHour</cell><cell>%d</cell></row>"+
+				"<row><cell>triggerType</cell><cell>cron</cell></row>"+
+				"<row><cell>throwExceptionOnExpiry</cell><cell>true</cell></row>"+
+				"<row><cell>timeZone</cell><cell>%s</cell></row>"+
+				"<row><cell>noOfSchedules</cell><cell>1</cell></row>"+
+				"<row><cell>schedule1</cell><cell>0+0+0/%d+?+*+*+*&trigger.timeZone=%s</cell></row>",
+			n, tz, n, tzID)
+	}
+
+	// Double-encode: & first so the replacements for < and > don't re-encode their own &
+	rows = strings.ReplaceAll(rows, "&", "&amp;amp;")
+	rows = strings.ReplaceAll(rows, "<", "&lt;")
+	rows = strings.ReplaceAll(rows, ">", "&gt;")
+	return rows
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
