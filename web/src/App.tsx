@@ -97,7 +97,7 @@ const GROUPS: { label: string; tabs: { id: ToolTab; label: string }[] }[] = [
     ],
   },
   {
-    label: 'Keys & Certs',
+    label: 'Security',
     tabs: [
       { id: 'keygen',      label: 'Key Generation' },
       { id: 'certgen',     label: 'Certificates'   },
